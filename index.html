@@ -108,6 +108,37 @@
     font-weight: 700;
     flex-shrink: 0;
   }
+  .format-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 560px) {
+    .format-picker { grid-template-columns: 1fr; }
+  }
+  .format-opt {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.12s ease;
+  }
+  .format-opt:hover { border-color: #93c5fd; }
+  .format-opt.active {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .format-opt input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--primary);
+  }
+  .format-opt strong { display: block; font-size: 0.92rem; color: #0f172a; }
+  .format-opt span { display: block; font-size: 0.78rem; color: var(--muted); }
   .dropzone {
     border: 2px dashed #94a3b8;
     border-radius: var(--radius);
@@ -291,12 +322,27 @@
   <!-- STEP 1: UPLOAD -->
   <section class="card">
     <div class="step-header">
-      <h2 class="step-title"><span class="step-num">1</span> Upload Monthly Schedule PDF</h2>
-      <span id="formatBadge" class="badge success hidden"></span>
+      <h2 class="step-title"><span class="step-num">1</span> Choose Format &amp; Upload Schedule PDF</h2>
+    </div>
+    <div class="format-picker" id="formatPicker">
+      <label class="format-opt active" id="optByName">
+        <input type="radio" name="pdfFormat" value="by-name" checked />
+        <div>
+          <strong>Names on Left (Schedule By Name)</strong>
+          <span>Faculty names down the left column, shifts inside the grid</span>
+        </div>
+      </label>
+      <label class="format-opt" id="optByShift">
+        <input type="radio" name="pdfFormat" value="by-shift" />
+        <div>
+          <strong>Shifts on Left (Master Schedule)</strong>
+          <span>Shift/room names &amp; times on the left, people inside the grid</span>
+        </div>
+      </label>
     </div>
     <div id="dropzone" class="dropzone" tabindex="0">
       <p style="margin:0 0 4px;"><strong>Click to choose a PDF</strong> or drag and drop it here</p>
-      <p class="muted" style="margin:0;">Works with both <em>Schedule By Name</em> and master <em>By Shift</em> PDFs. Nothing leaves your computer.</p>
+      <p class="muted" style="margin:0;">100% local in your browser. If you don't see your name after uploading, switch the format above.</p>
       <input type="file" id="fileInput" accept="application/pdf,.pdf" class="hidden" />
     </div>
     <div id="fileMeta" class="row hidden" style="margin-top:12px; align-items:center;">
@@ -304,20 +350,8 @@
         <span id="fileNameDisplay" style="font-weight:600;"></span>
         <span id="dateRangeDisplay" class="muted"></span>
       </div>
-      <div class="field" style="max-width:240px;">
-        <label for="layoutOverride">Detected Layout</label>
-        <select id="layoutOverride">
-          <option value="auto">Auto-detect</option>
-          <option value="by-name">Names on Left (By Name)</option>
-          <option value="by-shift">Shifts on Left (By Shift)</option>
-        </select>
-      </div>
     </div>
     <div id="uploadError" class="alert error"></div>
-    <details id="diagDetails" class="hidden" style="margin-top:10px;">
-      <summary style="font-size:0.82rem;">Parser Diagnostics</summary>
-      <pre id="diagOutput" class="diag"></pre>
-    </details>
   </section>
 
   <!-- STEP 2: NAME & TIMEZONE -->
@@ -476,7 +510,7 @@ const NON_NAME_TOKENS = new Set([
 let savedRules = loadRules();
 let pdfPagesItems = [];
 let currentFileName = '';
-let detectedLayout = 'by-name';
+let selectedLayout = 'by-name';
 let parsedSchedule = null;
 let activeShifts = [];
 
@@ -866,8 +900,16 @@ function buildParser(pages, layout) {
 // --- UI WIRING ---
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const layoutOverride = document.getElementById('layoutOverride');
 const nameSelect = document.getElementById('nameSelect');
+
+document.querySelectorAll('input[name="pdfFormat"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    selectedLayout = radio.value;
+    document.getElementById('optByName').classList.toggle('active', selectedLayout === 'by-name');
+    document.getElementById('optByShift').classList.toggle('active', selectedLayout === 'by-shift');
+    if (pdfPagesItems.length) reparseWithLayout();
+  });
+});
 const nameInput = document.getElementById('nameInput');
 const tzSelect = document.getElementById('tzSelect');
 
@@ -892,10 +934,7 @@ fileInput.addEventListener('change', e => {
   if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
 });
 
-layoutOverride.addEventListener('change', () => {
-  if (!pdfPagesItems.length) return;
-  reparseWithLayout();
-});
+
 
 async function handleFile(file) {
   const errEl = document.getElementById('uploadError');
@@ -913,10 +952,7 @@ async function handleFile(file) {
     if (totalText < 20) {
       throw new Error('This PDF contains no extractable text (it appears to be a scanned image). Please use the original spreadsheet-exported PDF.');
     }
-    const det = detectPdfLayout(pdfPagesItems);
-    detectedLayout = det.layout;
-    layoutOverride.value = 'auto';
-    reparseWithLayout(det);
+    reparseWithLayout();
   } catch (err) {
     errEl.textContent = err.message || 'Unable to parse this PDF.';
     errEl.classList.add('show');
@@ -926,25 +962,14 @@ async function handleFile(file) {
   }
 }
 
-function reparseWithLayout(detInfo) {
+function reparseWithLayout() {
   const errEl = document.getElementById('uploadError');
   errEl.classList.remove('show');
-  const activeLayout = layoutOverride.value === 'auto' ? detectedLayout : layoutOverride.value;
   try {
-    parsedSchedule = buildParser(pdfPagesItems, activeLayout);
+    parsedSchedule = buildParser(pdfPagesItems, selectedLayout);
     document.getElementById('fileMeta').classList.remove('hidden');
     document.getElementById('fileNameDisplay').textContent = currentFileName;
     document.getElementById('dateRangeDisplay').textContent = parsedSchedule.dateSpanText;
-
-    const badge = document.getElementById('formatBadge');
-    badge.textContent = activeLayout === 'by-shift'
-      ? 'Format: Shifts on Left (By Shift)'
-      : 'Format: Names on Left (By Name)';
-    badge.classList.remove('hidden');
-
-    document.getElementById('diagDetails').classList.remove('hidden');
-    document.getElementById('diagOutput').textContent =
-      parsedSchedule.diag + (detInfo ? `\nAuto-detect signals: timeColHits=${detInfo.timeColHits}, hasShiftTimes=${detInfo.hasShiftTimes}, hasFacultyHeader=${detInfo.hasFacultyHeader}` : '');
 
     nameSelect.innerHTML = parsedSchedule.names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
     let chosen = '';
