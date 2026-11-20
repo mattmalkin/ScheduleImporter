@@ -612,7 +612,8 @@ function isLikelyPersonName(str) {
   if (!str || str.length < 2) return false;
   if (NON_NAME_TOKENS.has(str)) return false;
   if (/^\d/.test(str)) return false;
-  if (/^(PREP|Late|UT\d|PAV-|48X-|Adm-|Leave-|FMLA-|Off-|Post-C|SDS|CTV-|Ped-|OB|PM-|WD-|WE-|APS|PACU|Chief|POCUS|Neuro|Ortho|ENT|Urology|Robotics|Critical|Transplant|Liver|GI-|Burn|Airway|CC-|3R)/i.test(str)) return false;
+  if (/^(PREP|Late|UT\d|PAV-|48X-|Adm-|Leave-|FMLA-|Off-|Post-C|SDS|CTV-|Ped-|OB|PM-|WD-|WE-|APS|PACU|Chief|POCUS|Neuro|Ortho|ENT|Urology|Robotics|Critical|Transplant|Liver|GI-|Burn|Airway|CC-|3R|PL-|Mtg-|WE-)/i.test(str)) return false;
+  if (/\b(BU|WED|WN|WE|INT|PC)\b/i.test(str)) return false;
   if (/\.xlsx$/i.test(str)) return false;
   return /^[A-Za-z][A-Za-z\s\-'.()]+$/.test(str);
 }
@@ -700,29 +701,39 @@ function buildParser(pages, layout) {
       }
     };
   } else {
-    // BY-SHIFT LAYOUT
+    // BY-SHIFT LAYOUT: Shift column is on the left, Shift Times next, assigned people in the date grid
     const namesSet = new Set();
+    const shiftLabelSet = new Set();
     const parsedPages = pages.map((items, pIdx) => {
       const cols = pageDateCols[pIdx];
       if (!cols.length) return null;
-      const minDateX = cols[0].xc - 18;
-      // Shift labels on far left (x0 < 92) below header
-      const headerY = Math.max(...items.filter(it => /^\d{1,2}\/\d{1,2}$/.test(it.str)).map(it => it.y0));
+      const dateTokens = items.filter(it => /^\d{1,2}\s*\/\s*\d{1,2}$/.test(it.str));
+      const headerY = dateTokens.length ? Math.max(...dateTokens.map(it => it.y0)) : 750;
+      const firstDateX0 = Math.min(...cols.map(c => c.xc - 8));
+      const minDateX = Math.min(firstDateX0 - 4, 134);
+
       const shiftLabels = items
-        .filter(it => it.x0 < 92 && it.y0 < headerY - 3)
+        .filter(it => it.x0 < 95 && it.y0 < headerY - 3)
         .sort((a, b) => b.y0 - a.y0);
+      shiftLabels.forEach(s => shiftLabelSet.add(s.str));
+
       const timeLabels = items.filter(it => it.x0 >= 92 && it.x0 < minDateX && it.y0 < headerY - 3);
       const gridCells = items.filter(it => it.x0 >= minDateX && it.y0 < headerY - 3);
 
       for (const cell of gridCells) {
-        if (isLikelyPersonName(cell.str)) namesSet.add(cell.str);
+        if (!shiftLabelSet.has(cell.str) && isLikelyPersonName(cell.str)) {
+          namesSet.add(cell.str);
+        }
       }
       return { cols, shiftLabels, timeLabels, gridCells };
     }).filter(Boolean);
 
+    // Filter out any shift label that accidentally entered namesSet
+    for (const sl of shiftLabelSet) namesSet.delete(sl);
+
     const names = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
     if (!names.length) {
-      throw new Error('Detected "By Shift" layout, but could not find any assigned names in the schedule grid.');
+      throw new Error('Detected "By Shift" layout, but could not find any assigned people in the schedule grid.');
     }
 
     return {
@@ -734,7 +745,7 @@ function buildParser(pages, layout) {
         const results = [];
         for (const pp of parsedPages) {
           for (const cell of pp.gridCells) {
-            if (cell.str.toLowerCase() !== needle) continue;
+            if (cell.str.trim().toLowerCase() !== needle) continue;
             // Match date column
             let bestCol = null;
             let bestDx = 999;
@@ -744,7 +755,7 @@ function buildParser(pages, layout) {
             }
             if (!bestCol || bestDx > 18) continue;
 
-            // Match shift label on same y or closest label at/above y
+            // Match shift label on same y (or closest at/above y)
             let bestShift = null;
             let bestDy = 999;
             for (const s of pp.shiftLabels) {
