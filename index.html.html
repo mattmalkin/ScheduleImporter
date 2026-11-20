@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Department Schedule to Outlook (.ics) Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --border: #d8dee9;
+    --text: #1e293b;
+    --muted: #64748b;
+    --primary: #1d4ed8;
+    --primary-hover: #1e40af;
+    --primary-light: #eff6ff;
+    --success: #15803d;
+    --success-bg: #f0fdf4;
+    --warn: #b45309;
+    --warn-bg: #fffbeb;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  header p {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid #bfdbfe;
+  }
+  .badge.success {
+    background: var(--success-bg);
+    color: var(--success);
+    border-color: #bbf7d0;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .step-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .step-num {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .dropzone {
+    border: 2px dashed #94a3b8;
+    border-radius: var(--radius);
+    padding: 28px 18px;
+    text-align: center;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .dropzone strong { color: var(--primary); }
+  .alert {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    margin-top: 12px;
+    display: none;
+  }
+  .alert.show { display: block; }
+  .alert.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+  .alert.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #fde68a; }
+  .alert.info { background: var(--primary-light); color: #1e3a8a; border: 1px solid #bfdbfe; }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    flex: 1;
+  }
+  label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+  }
+  input[type="text"], input[type="time"], select {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font-size: 0.92rem;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus, select:focus {
+    outline: 2px solid #93c5fd;
+    border-color: var(--primary);
+  }
+  button {
+    padding: 8px 14px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  button:hover { background: #f1f5f9; }
+  button.primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--primary-hover); }
+  button.sm {
+    padding: 4px 9px;
+    font-size: 0.78rem;
+  }
+  .shift-rule-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fcfcfd;
+  }
+  .shift-rule-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .shift-code-tag {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #0f172a;
+  }
+  .count-pill {
+    font-size: 0.76rem;
+    background: #e2e8f0;
+    color: #334155;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .printed-time-pill {
+    font-size: 0.76rem;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .preset-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .rule-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  th {
+    background: #f8fafc;
+    font-weight: 700;
+    color: #334155;
+  }
+  tr.skipped { opacity: 0.45; }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary);
+    user-select: none;
+  }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 0.84rem; }
+  .export-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #e2e8f0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>Schedule PDF to Outlook (.ics) Converter</h1>
+      <p>100% local in your browser &bull; Supports both "By Name" and "By Shift" schedule PDFs</p>
+    </div>
+    <span class="badge">Free Status &bull; No Reminders</span>
+  </header>
+
+  <!-- STEP 1: UPLOAD -->
+  <section class="card">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">1</span> Upload Monthly Schedule PDF</h2>
+      <span id="formatBadge" class="badge success hidden"></span>
+    </div>
+    <div id="dropzone" class="dropzone" tabindex="0">
+      <p style="margin:0 0 4px;"><strong>Click to choose a PDF</strong> or drag and drop it here</p>
+      <p class="muted" style="margin:0;">Works with both <em>Schedule By Name</em> and master <em>By Shift</em> PDFs. Nothing leaves your computer.</p>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" class="hidden" />
+    </div>
+    <div id="fileMeta" class="row hidden" style="margin-top:12px; align-items:center;">
+      <div class="field" style="flex:2;">
+        <span id="fileNameDisplay" style="font-weight:600;"></span>
+        <span id="dateRangeDisplay" class="muted"></span>
+      </div>
+      <div class="field" style="max-width:240px;">
+        <label for="layoutOverride">Detected Layout</label>
+        <select id="layoutOverride">
+          <option value="auto">Auto-detect</option>
+          <option value="by-name">Names on Left (By Name)</option>
+          <option value="by-shift">Shifts on Left (By Shift)</option>
+        </select>
+      </div>
+    </div>
+    <div id="uploadError" class="alert error"></div>
+  </section>
+
+  <!-- STEP 2: NAME & TIMEZONE -->
+  <section id="step2" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">2</span> Select or Enter Your Name</h2>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="nameSelect">Detected Names in Schedule</label>
+        <select id="nameSelect"></select>
+      </div>
+      <div class="field">
+        <label for="nameInput">Or Type Name Exactly as Listed</label>
+        <input type="text" id="nameInput" placeholder="e.g. Malkin" />
+      </div>
+      <div class="field">
+        <label for="tzSelect">Calendar Time Zone</label>
+        <select id="tzSelect">
+          <option value="America/Los_Angeles" selected>Pacific Time (America/Los_Angeles)</option>
+          <option value="America/Denver">Mountain Time (America/Denver)</option>
+          <option value="America/Chicago">Central Time (America/Chicago)</option>
+          <option value="America/New_York">Eastern Time (America/New_York)</option>
+        </select>
+      </div>
+    </div>
+    <div id="nameAlert" class="alert warn"></div>
+  </section>
+
+  <!-- STEP 3: DEFINE SHIFT HOURS -->
+  <section id="step3" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">3</span> Confirm Shift Hours</h2>
+      <span class="muted">Changes save automatically in your browser</span>
+    </div>
+    <div id="shiftRulesContainer"></div>
+
+    <details style="margin-top:14px;">
+      <summary>Manage All Saved Shift Rules &amp; Presets (Import / Export JSON)</summary>
+      <div style="margin-top:12px;">
+        <div class="row" style="margin-bottom:10px;">
+          <div class="field">
+            <label for="newRuleCode">Shift Code</label>
+            <input type="text" id="newRuleCode" placeholder="e.g. PREP, Late 4, UT12" />
+          </div>
+          <div class="field" style="max-width:150px;">
+            <label for="newRuleMode">Type</label>
+            <select id="newRuleMode">
+              <option value="timed">Timed</option>
+              <option value="allday">All-Day</option>
+              <option value="skip">Skip</option>
+            </select>
+          </div>
+          <div class="field" style="max-width:130px;">
+            <label for="newRuleStart">Start</label>
+            <input type="time" id="newRuleStart" value="08:00" />
+          </div>
+          <div class="field" style="max-width:130px;">
+            <label for="newRuleEnd">End</label>
+            <input type="time" id="newRuleEnd" value="17:00" />
+          </div>
+          <button type="button" id="addRuleBtn" class="primary">Save Rule</button>
+        </div>
+        <div class="row" style="margin-bottom:10px;">
+          <button type="button" id="exportRulesBtn">Export Rules (JSON)</button>
+          <button type="button" id="importRulesBtn">Import Rules (JSON)</button>
+          <button type="button" id="resetRulesBtn">Reset to Defaults</button>
+          <input type="file" id="importRulesInput" accept="application/json,.json" class="hidden" />
+        </div>
+        <div id="allRulesTableWrap" style="max-height:240px; overflow:auto; border:1px solid #e2e8f0; border-radius:7px;"></div>
+      </div>
+    </details>
+  </section>
+
+  <!-- STEP 4: PREVIEW & EXPORT -->
+  <section id="step4" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">4</span> Preview &amp; Download Outlook Calendar (.ics)</h2>
+      <span id="eventCountBadge" class="badge"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:42px;">Inc.</th>
+            <th>Date</th>
+            <th>Day</th>
+            <th>Shift Title</th>
+            <th>Hours</th>
+            <th>Availability</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+    <div class="export-bar">
+      <span class="muted">All events export as <strong>Free</strong> (won't block meeting invites) with <strong>zero reminders</strong>.</span>
+      <button type="button" id="downloadIcsBtn" class="primary" style="font-size:0.96rem; padding:10px 18px;">Download .ics File</button>
+    </div>
+  </section>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const STORAGE_RULES_KEY = 'dept_sched_rules_v3';
+const STORAGE_NAME_KEY = 'dept_sched_last_name_v3';
+const STORAGE_TZ_KEY = 'dept_sched_tz_v3';
+
+const DEFAULT_EXACT_RULES = {
+  'PREP':    { mode: 'timed', start: '08:00', end: '17:00', overnight: false },
+  'Late 4':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 5':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 10': { mode: 'timed', start: '10:00', end: '20:00', overnight: false },
+  'UT12':    { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 12':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 10':  { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'PACU':    { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'Chief':   { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'OB-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WD-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WE-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'PM-1':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false },
+  'PM-2':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false }
+};
+
+const DEFAULT_PREFIX_RULES = [
+  { prefix: 'Adm-',     rule: { mode: 'allday' } },
+  { prefix: 'Mtg-',     rule: { mode: 'allday' } },
+  { prefix: 'Leave-',   rule: { mode: 'skip' } },
+  { prefix: 'FMLA-',    rule: { mode: 'skip' } },
+  { prefix: 'Off-',     rule: { mode: 'skip' } },
+  { prefix: 'Post-C',   rule: { mode: 'skip' } },
+  { prefix: 'PAV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: '48X-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'SDS',      rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'CTV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'Ped-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } }
+];
+
+const TIME_PRESETS = [
+  { label: '7a–3p',   mode: 'timed', start: '07:00', end: '15:00', overnight: false },
+  { label: '7a–5p',   mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  { label: '7a–7p',   mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  { label: '8a–5p',   mode: 'timed', start: '08:00', end: '17:00', overnight: false },
+  { label: 'All-Day', mode: 'allday' },
+  { label: 'Skip',    mode: 'skip' }
+];
+
+const NON_NAME_TOKENS = new Set([
+  'Faculty', 'Full-time', 'Availability', 'Week', 'Shift', 'Times', 'Shift Times',
+  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Schedule By Name', 'TBD'
+]);
+
+let savedRules = loadRules();
+let pdfPagesItems = [];
+let currentFileName = '';
+let detectedLayout = 'by-name';
+let parsedSchedule = null; // { layout, names: [], getShiftsForName(name), dateSpanText }
+let activeShifts = [];     // [{ id, dateObj, dateStr, dow, shift, printedTime, included }]
+
+function loadRules() {
+  try {
+    const raw = localStorage.getItem(STORAGE_RULES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_EXACT_RULES));
+}
+
+function saveRules() {
+  try {
+    localStorage.setItem(STORAGE_RULES_KEY, JSON.stringify(savedRules));
+  } catch (e) {}
+  renderAllRulesTable();
+}
+
+function getRuleForShift(shiftCode, printedTime) {
+  const clean = (shiftCode || '').trim();
+  if (savedRules[clean]) return { ...savedRules[clean], source: 'saved' };
+  const lower = clean.toLowerCase();
+  for (const [k, v] of Object.entries(savedRules)) {
+    if (k.toLowerCase() === lower) return { ...v, source: 'saved' };
+  }
+  for (const p of DEFAULT_PREFIX_RULES) {
+    if (lower.startsWith(p.prefix.toLowerCase())) {
+      return { ...p.rule, source: 'suggested' };
+    }
+  }
+  // If Shift-on-Left PDF has explicit start-end like 7:00-19:00
+  if (printedTime) {
+    const m = printedTime.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+    if (m) {
+      const sh = m[1].padStart(2, '0') + ':' + m[2];
+      const eh = m[3].padStart(2, '0') + ':' + m[4];
+      return { mode: 'timed', start: sh, end: eh, overnight: eh <= sh, source: 'pdf-time' };
+    }
+  }
+  return { mode: 'allday', start: '08:00', end: '17:00', overnight: false, source: 'default' };
+}
+
+// --- PDF EXTRACTION ---
+async function extractPdfTextItems(arrayBuffer) {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const items = [];
+    for (const item of tc.items) {
+      const str = (item.str || '').trim();
+      if (!str) continue;
+      const x0 = item.transform[4];
+      const y0 = item.transform[5];
+      const w = item.width || (str.length * 4);
+      items.push({ x0, y0, x1: x0 + w, xc: x0 + w / 2, str });
+    }
+    pages.push(items);
+  }
+  return pages;
+}
+
+function inferYearForDates(dateList) {
+  // dateList: [{ month, day, dow }]
+  const nowYear = new Date().getFullYear();
+  const candidates = [nowYear - 1, nowYear, nowYear + 1, nowYear + 2];
+  const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  let bestYear = nowYear;
+  let bestScore = -1;
+
+  for (const startYear of candidates) {
+    let score = 0;
+    let yr = startYear;
+    let prevM = null;
+    for (const d of dateList) {
+      if (prevM !== null && d.month < prevM) yr += 1;
+      prevM = d.month;
+      if (d.dow && dowNames.includes(d.dow)) {
+        const dt = new Date(yr, d.month - 1, d.day);
+        if (dowNames[dt.getDay()] === d.dow) score++;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestYear = startYear;
+    }
+  }
+  return bestYear;
+}
+
+function extractDateColumnsFromPage(items) {
+  const dateTokens = items.filter(it => /^\d{1,2}\s*\/\s*\d{1,2}$/.test(it.str));
+  if (!dateTokens.length) return [];
+  // Find y band with most MM/DD tokens (header row)
+  const bands = [];
+  for (const dt of dateTokens) {
+    let b = bands.find(x => Math.abs(x.y - dt.y0) < 4);
+    if (!b) { b = { y: dt.y0, items: [] }; bands.push(b); }
+    b.items.push(dt);
+  }
+  bands.sort((a, b) => b.items.length - a.items.length);
+  const headerDates = bands[0].items.sort((a, b) => a.xc - b.xc);
+  const headerY = bands[0].y;
+
+  const validDows = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  const dowTokens = items.filter(it => validDows.has(it.str) && Math.abs(it.y0 - headerY) < 16);
+
+  return headerDates.map(d => {
+    const parts = d.str.split('/').map(s => parseInt(s.trim(), 10));
+    let nearestDow = '';
+    let minDx = 999;
+    for (const dw of dowTokens) {
+      const dx = Math.abs(dw.xc - d.xc);
+      if (dx < minDx) { minDx = dx; nearestDow = dw.str; }
+    }
+    return {
+      xc: d.xc,
+      raw: `${parts[0]}/${parts[1]}`,
+      month: parts[0],
+      day: parts[1],
+      dow: minDx < 18 ? nearestDow : ''
+    };
+  });
+}
+
+function detectPdfLayout(pages) {
+  let hasShiftTimes = false;
+  let hasFacultyHeader = false;
+  let leftShiftCodeHits = 0;
+
+  for (const items of pages) {
+    for (const it of items) {
+      if (/shift\s*times?/i.test(it.str)) hasShiftTimes = true;
+      if (/^faculty$/i.test(it.str)) hasFacultyHeader = true;
+      if (it.x0 < 85 && /^(PREP|Late\s*\d+|UT\d+|PAV-\d+|48X-|CTV-|Ped-|Neuro\/Spine|Chief|PACU)/i.test(it.str)) {
+        leftShiftCodeHits++;
+      }
+    }
+  }
+  if (hasShiftTimes || leftShiftCodeHits >= 3) return 'by-shift';
+  if (hasFacultyHeader) return 'by-name';
+  return 'by-name';
+}
+
+function isLikelyPersonName(str) {
+  if (!str || str.length < 2) return false;
+  if (NON_NAME_TOKENS.has(str)) return false;
+  if (/^\d/.test(str)) return false;
+  if (/^(PREP|Late|UT\d|PAV-|48X-|Adm-|Leave-|FMLA-|Off-|Post-C|SDS|CTV-|Ped-|OB|PM-|WD-|WE-|APS|PACU|Chief|POCUS|Neuro|Ortho|ENT|Urology|Robotics|Critical|Transplant|Liver|GI-|Burn|Airway|CC-|3R)/i.test(str)) return false;
+  if (/\.xlsx$/i.test(str)) return false;
+  return /^[A-Za-z][A-Za-z\s\-'.()]+$/.test(str);
+}
+
+function buildParser(pages, layout) {
+  // Collect all date columns across pages to assign continuous years
+  const pageDateCols = pages.map(items => extractDateColumnsFromPage(items));
+  const flatDates = pageDateCols.flat();
+  if (flatDates.length < 5) {
+    throw new Error('Could not find recognizable MM/DD date columns at the top of this PDF. Make sure the file is a text-based schedule PDF (not a scanned image).');
+  }
+
+  const startYear = inferYearForDates(flatDates);
+  let curYear = startYear;
+  let prevM = null;
+  const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  for (const cols of pageDateCols) {
+    for (const c of cols) {
+      if (prevM !== null && c.month < prevM) curYear += 1;
+      prevM = c.month;
+      c.year = curYear;
+      c.dateObj = new Date(curYear, c.month - 1, c.day);
+      c.dow = dowNames[c.dateObj.getDay()];
+      c.iso = `${curYear}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
+    }
+  }
+
+  const firstD = flatDates[0];
+  const lastD = flatDates[flatDates.length - 1];
+  const dateSpanText = `${firstD.month}/${firstD.day}/${firstD.year} – ${lastD.month}/${lastD.day}/${lastD.year} (${flatDates.length} days)`;
+
+  if (layout === 'by-name') {
+    const namesSet = new Set();
+    const pageRows = pages.map((items, pIdx) => {
+      const cols = pageDateCols[pIdx];
+      if (!cols.length) return [];
+      const minDateX = cols[0].xc - 15;
+      // Left-column labels have x0 < minDateX - 10
+      const leftItems = items.filter(it => it.x0 < minDateX - 8 && isLikelyPersonName(it.str));
+      leftItems.forEach(it => namesSet.add(it.str));
+      return { items, cols, leftItems, minDateX };
+    });
+
+    const names = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
+    if (!names.length) {
+      throw new Error('Detected "By Name" layout, but no faculty names were found in the left column. Try switching Detected Layout to "Shifts on Left (By Shift)".');
+    }
+
+    return {
+      layout,
+      names,
+      dateSpanText,
+      getShiftsForName(targetName) {
+        const needle = targetName.trim().toLowerCase();
+        const results = [];
+        for (const pr of pageRows) {
+          if (!pr.cols || !pr.cols.length) continue;
+          const matchingNameRows = pr.leftItems.filter(it => it.str.toLowerCase() === needle);
+          for (const nameCell of matchingNameRows) {
+            const rowItems = pr.items.filter(it => it.x0 >= pr.minDateX - 8 && Math.abs(it.y0 - nameCell.y0) <= 2.5);
+            for (const cell of rowItems) {
+              // Find closest date column
+              let bestCol = null;
+              let bestDx = 999;
+              for (const c of pr.cols) {
+                const dx = Math.abs(c.xc - cell.xc);
+                if (dx < bestDx) { bestDx = dx; bestCol = c; }
+              }
+              if (bestCol && bestDx <= 16) {
+                results.push({
+                  dateObj: bestCol.dateObj,
+                  iso: bestCol.iso,
+                  displayDate: `${bestCol.month}/${bestCol.day}/${bestCol.year}`,
+                  dow: bestCol.dow,
+                  shift: cell.str,
+                  printedTime: ''
+                });
+              }
+            }
+          }
+        }
+        results.sort((a, b) => a.dateObj - b.dateObj);
+        return results;
+      }
+    };
+  } else {
+    // BY-SHIFT LAYOUT
+    const namesSet = new Set();
+    const parsedPages = pages.map((items, pIdx) => {
+      const cols = pageDateCols[pIdx];
+      if (!cols.length) return null;
+      const minDateX = cols[0].xc - 18;
+      // Shift labels on far left (x0 < 92) below header
+      const headerY = Math.max(...items.filter(it => /^\d{1,2}\/\d{1,2}$/.test(it.str)).map(it => it.y0));
+      const shiftLabels = items
+        .filter(it => it.x0 < 92 && it.y0 < headerY - 3)
+        .sort((a, b) => b.y0 - a.y0);
+      const timeLabels = items.filter(it => it.x0 >= 92 && it.x0 < minDateX && it.y0 < headerY - 3);
+      const gridCells = items.filter(it => it.x0 >= minDateX && it.y0 < headerY - 3);
+
+      for (const cell of gridCells) {
+        if (isLikelyPersonName(cell.str)) namesSet.add(cell.str);
+      }
+      return { cols, shiftLabels, timeLabels, gridCells };
+    }).filter(Boolean);
+
+    const names = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
+    if (!names.length) {
+      throw new Error('Detected "By Shift" layout, but could not find any assigned names in the schedule grid.');
+    }
+
+    return {
+      layout,
+      names,
+      dateSpanText,
+      getShiftsForName(targetName) {
+        const needle = targetName.trim().toLowerCase();
+        const results = [];
+        for (const pp of parsedPages) {
+          for (const cell of pp.gridCells) {
+            if (cell.str.toLowerCase() !== needle) continue;
+            // Match date column
+            let bestCol = null;
+            let bestDx = 999;
+            for (const c of pp.cols) {
+              const dx = Math.abs(c.xc - cell.xc);
+              if (dx < bestDx) { bestDx = dx; bestCol = c; }
+            }
+            if (!bestCol || bestDx > 18) continue;
+
+            // Match shift label on same y or closest label at/above y
+            let bestShift = null;
+            let bestDy = 999;
+            for (const s of pp.shiftLabels) {
+              const dy = Math.abs(s.y0 - cell.y0);
+              if (dy < bestDy) { bestDy = dy; bestShift = s; }
+            }
+            if (!bestShift || bestDy > 14) continue;
+
+            const nearTime = pp.timeLabels.find(t => Math.abs(t.y0 - bestShift.y0) <= 4);
+            results.push({
+              dateObj: bestCol.dateObj,
+              iso: bestCol.iso,
+              displayDate: `${bestCol.month}/${bestCol.day}/${bestCol.year}`,
+              dow: bestCol.dow,
+              shift: bestShift.str,
+              printedTime: nearTime ? nearTime.str : ''
+            });
+          }
+        }
+        results.sort((a, b) => a.dateObj - b.dateObj);
+        return results;
+      }
+    };
+  }
+}
+
+// --- UI WIRING ---
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const layoutOverride = document.getElementById('layoutOverride');
+const nameSelect = document.getElementById('nameSelect');
+const nameInput = document.getElementById('nameInput');
+const tzSelect = document.getElementById('tzSelect');
+
+try {
+  const savedTz = localStorage.getItem(STORAGE_TZ_KEY);
+  if (savedTz) tzSelect.value = savedTz;
+} catch (e) {}
+
+tzSelect.addEventListener('change', () => {
+  try { localStorage.setItem(STORAGE_TZ_KEY, tzSelect.value); } catch (e) {}
+});
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+layoutOverride.addEventListener('change', () => {
+  if (!pdfPagesItems.length) return;
+  reparseWithLayout();
+});
+
+async function handleFile(file) {
+  const errEl = document.getElementById('uploadError');
+  errEl.classList.remove('show');
+  if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+    errEl.textContent = 'Please upload a valid PDF schedule file (.pdf).';
+    errEl.classList.add('show');
+    return;
+  }
+  currentFileName = file.name;
+  try {
+    const buf = await file.arrayBuffer();
+    pdfPagesItems = await extractPdfTextItems(buf);
+    const totalText = pdfPagesItems.reduce((acc, p) => acc + p.length, 0);
+    if (totalText < 20) {
+      throw new Error('This PDF contains no extractable text (it appears to be a scanned image). Please use the original spreadsheet-exported PDF.');
+    }
+    detectedLayout = detectPdfLayout(pdfPagesItems);
+    layoutOverride.value = 'auto';
+    reparseWithLayout();
+  } catch (err) {
+    errEl.textContent = err.message || 'Unable to parse this PDF.';
+    errEl.classList.add('show');
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+  }
+}
+
+function reparseWithLayout() {
+  const errEl = document.getElementById('uploadError');
+  errEl.classList.remove('show');
+  const activeLayout = layoutOverride.value === 'auto' ? detectedLayout : layoutOverride.value;
+  try {
+    parsedSchedule = buildParser(pdfPagesItems, activeLayout);
+    document.getElementById('fileMeta').classList.remove('hidden');
+    document.getElementById('fileNameDisplay').textContent = currentFileName;
+    document.getElementById('dateRangeDisplay').textContent = parsedSchedule.dateSpanText;
+
+    const badge = document.getElementById('formatBadge');
+    badge.textContent = activeLayout === 'by-shift'
+      ? 'Format: Shifts on Left (By Shift)'
+      : 'Format: Names on Left (By Name)';
+    badge.classList.remove('hidden');
+
+    // Populate names dropdown
+    nameSelect.innerHTML = parsedSchedule.names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    let chosen = '';
+    try { chosen = localStorage.getItem(STORAGE_NAME_KEY) || ''; } catch (e) {}
+    const match = parsedSchedule.names.find(n => n.toLowerCase() === chosen.toLowerCase())
+               || parsedSchedule.names.find(n => n.toLowerCase() === 'malkin')
+               || parsedSchedule.names[0];
+    if (match) {
+      nameSelect.value = match;
+      nameInput.value = match;
+    }
+
+    document.getElementById('step2').classList.remove('hidden');
+    refreshForSelectedName();
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not parse schedule structure.';
+    errEl.classList.add('show');
+  }
+}
+
+nameSelect.addEventListener('change', () => {
+  nameInput.value = nameSelect.value;
+  refreshForSelectedName();
+});
+
+nameInput.addEventListener('input', () => {
+  const typed = nameInput.value.trim().toLowerCase();
+  const exact = parsedSchedule && parsedSchedule.names.find(n => n.toLowerCase() === typed);
+  if (exact) nameSelect.value = exact;
+  refreshForSelectedName();
+});
+
+function refreshForSelectedName() {
+  if (!parsedSchedule) return;
+  const target = nameInput.value.trim();
+  const nameAlert = document.getElementById('nameAlert');
+  nameAlert.classList.remove('show');
+
+  if (!target) {
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+    return;
+  }
+
+  try { localStorage.setItem(STORAGE_NAME_KEY, target); } catch (e) {}
+  const rawShifts = parsedSchedule.getShiftsForName(target);
+  if (!rawShifts.length) {
+    nameAlert.textContent = `No shifts found for "${target}" in this PDF. Check the spelling or choose a name from the dropdown.`;
+    nameAlert.classList.add('show');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+    return;
+  }
+
+  activeShifts = rawShifts.map((s, idx) => {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    return {
+      ...s,
+      id: idx,
+      included: rule.mode !== 'skip'
+    };
+  });
+
+  document.getElementById('step3').classList.remove('hidden');
+  document.getElementById('step4').classList.remove('hidden');
+  renderShiftRuleCards();
+  renderPreviewTable();
+}
+
+function renderShiftRuleCards() {
+  const container = document.getElementById('shiftRulesContainer');
+  const groups = new Map();
+  for (const s of activeShifts) {
+    if (!groups.has(s.shift)) groups.set(s.shift, { count: 0, printedTime: s.printedTime });
+    groups.get(s.shift).count++;
+  }
+
+  container.innerHTML = '';
+  for (const [shiftCode, info] of groups.entries()) {
+    const rule = getRuleForShift(shiftCode, info.printedTime);
+    const card = document.createElement('div');
+    card.className = 'shift-rule-card';
+
+    const presetsHtml = TIME_PRESETS.map(p =>
+      `<button type="button" class="sm preset-btn" data-mode="${p.mode}" data-start="${p.start || ''}" data-end="${p.end || ''}">${p.label}</button>`
+    ).join('');
+
+    card.innerHTML = `
+      <div class="shift-rule-top">
+        <div>
+          <span class="shift-code-tag">${escapeHtml(shiftCode)}</span>
+          <span class="count-pill">${info.count} shift${info.count > 1 ? 's' : ''}</span>
+          ${info.printedTime ? `<span class="printed-time-pill">PDF time: ${escapeHtml(info.printedTime)}</span>` : ''}
+        </div>
+        <div class="preset-btns">${presetsHtml}</div>
+      </div>
+      <div class="rule-controls">
+        <select class="rule-mode">
+          <option value="timed" ${rule.mode === 'timed' ? 'selected' : ''}>Timed Shift</option>
+          <option value="allday" ${rule.mode === 'allday' ? 'selected' : ''}>All-Day Event</option>
+          <option value="skip" ${rule.mode === 'skip' ? 'selected' : ''}>Skip (Do Not Import)</option>
+        </select>
+        <span class="time-inputs ${rule.mode === 'timed' ? '' : 'hidden'}">
+          <input type="time" class="rule-start" value="${rule.start || '08:00'}" />
+          <span>to</span>
+          <input type="time" class="rule-end" value="${rule.end || '17:00'}" />
+          <label style="display:inline-flex; align-items:center; gap:4px; margin-left:6px; font-weight:500;">
+            <input type="checkbox" class="rule-overnight" ${rule.overnight ? 'checked' : ''} /> Overnight (+1d)
+          </label>
+        </span>
+      </div>
+    `;
+
+    const modeSel = card.querySelector('.rule-mode');
+    const timeSpan = card.querySelector('.time-inputs');
+    const startInp = card.querySelector('.rule-start');
+    const endInp = card.querySelector('.rule-end');
+    const ovnInp = card.querySelector('.rule-overnight');
+
+    const commit = () => {
+      const mode = modeSel.value;
+      timeSpan.classList.toggle('hidden', mode !== 'timed');
+      const start = startInp.value || '08:00';
+      const end = endInp.value || '17:00';
+      const overnight = ovnInp.checked;
+      savedRules[shiftCode] = { mode, start, end, overnight };
+      saveRules();
+      activeShifts.forEach(s => {
+        if (s.shift === shiftCode) s.included = (mode !== 'skip');
+      });
+      renderPreviewTable();
+    };
+
+    modeSel.addEventListener('change', commit);
+    startInp.addEventListener('change', commit);
+    endInp.addEventListener('change', () => {
+      if (startInp.value && endInp.value && endInp.value <= startInp.value) ovnInp.checked = true;
+      commit();
+    });
+    ovnInp.addEventListener('change', commit);
+
+    card.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modeSel.value = btn.dataset.mode;
+        if (btn.dataset.start) startInp.value = btn.dataset.start;
+        if (btn.dataset.end) endInp.value = btn.dataset.end;
+        ovnInp.checked = (btn.dataset.start && btn.dataset.end && btn.dataset.end <= btn.dataset.start);
+        commit();
+      });
+    });
+
+    container.appendChild(card);
+  }
+}
+
+function format12h(hhmm) {
+  const [hStr, mStr] = hhmm.split(':');
+  let h = parseInt(hStr, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${mStr} ${ampm}`;
+}
+
+function renderPreviewTable() {
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = '';
+  let includedCount = 0;
+
+  for (const s of activeShifts) {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    if (s.included) includedCount++;
+
+    let hoursText = 'All-day';
+    if (rule.mode === 'skip') {
+      hoursText = 'Skipped';
+    } else if (rule.mode === 'timed') {
+      hoursText = `${format12h(rule.start)} – ${format12h(rule.end)}${rule.overnight ? ' (+1d)' : ''}`;
+    }
+
+    const tr = document.createElement('tr');
+    if (!s.included) tr.classList.add('skipped');
+    tr.innerHTML = `
+      <td><input type="checkbox" ${s.included ? 'checked' : ''} /></td>
+      <td>${escapeHtml(s.displayDate)}</td>
+      <td>${escapeHtml(s.dow)}</td>
+      <td><strong>${escapeHtml(s.shift)}</strong></td>
+      <td>${escapeHtml(hoursText)}</td>
+      <td><span class="badge success">Free</span></td>
+    `;
+    tr.querySelector('input[type="checkbox"]').addEventListener('change', e => {
+      s.included = e.target.checked;
+      tr.classList.toggle('skipped', !s.included);
+      updateEventCount();
+    });
+    tbody.appendChild(tr);
+  }
+  updateEventCount();
+}
+
+function updateEventCount() {
+  const n = activeShifts.filter(s => s.included).length;
+  document.getElementById('eventCountBadge').textContent = `${n} event${n === 1 ? '' : 's'} ready`;
+}
+
+// --- MANAGE ALL RULES ---
+function renderAllRulesTable() {
+  const wrap = document.getElementById('allRulesTableWrap');
+  const entries = Object.entries(savedRules).sort((a, b) => a[0].localeCompare(b[0]));
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>Shift</th><th>Type</th><th>Hours</th><th></th></tr></thead>
+      <tbody>
+        ${entries.map(([code, r]) => `
+          <tr>
+            <td><strong>${escapeHtml(code)}</strong></td>
+            <td>${escapeHtml(r.mode)}</td>
+            <td>${r.mode === 'timed' ? `${r.start} – ${r.end}${r.overnight ? ' (+1d)' : ''}` : '—'}</td>
+            <td style="text-align:right;"><button type="button" class="sm del-rule" data-code="${escapeHtml(code)}">Remove</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  wrap.querySelectorAll('.del-rule').forEach(btn => {
+    btn.addEventListener('click', () => {
+      delete savedRules[btn.dataset.code];
+      saveRules();
+      if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+    });
+  });
+}
+
+document.getElementById('addRuleBtn').addEventListener('click', () => {
+  const code = document.getElementById('newRuleCode').value.trim();
+  if (!code) return;
+  const mode = document.getElementById('newRuleMode').value;
+  const start = document.getElementById('newRuleStart').value || '08:00';
+  const end = document.getElementById('newRuleEnd').value || '17:00';
+  savedRules[code] = { mode, start, end, overnight: mode === 'timed' && end <= start };
+  saveRules();
+  document.getElementById('newRuleCode').value = '';
+  if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+});
+
+document.getElementById('exportRulesBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(savedRules, null, 2)], { type: 'application/json' });
+  triggerDownload(blob, 'schedule-shift-rules.json');
+});
+
+document.getElementById('importRulesBtn').addEventListener('click', () => {
+  document.getElementById('importRulesInput').click();
+});
+
+document.getElementById('importRulesInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const obj = JSON.parse(await f.text());
+    savedRules = { ...savedRules, ...obj };
+    saveRules();
+    if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+  } catch (err) {
+    alert('Invalid JSON rules file.');
+  }
+});
+
+document.getElementById('resetRulesBtn').addEventListener('click', () => {
+  savedRules = JSON.parse(JSON.stringify(DEFAULT_EXACT_RULES));
+  saveRules();
+  if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+});
+
+// --- ICS GENERATION (ALWAYS FREE, ZERO REMINDERS) ---
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function ymdCompact(d) {
+  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+}
+
+function buildVTimezone(tz) {
+  if (tz === 'America/Los_Angeles') {
+    return [
+      'BEGIN:VTIMEZONE',
+      'TZID:America/Los_Angeles',
+      'BEGIN:STANDARD',
+      'DTSTART:19701101T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+      'TZOFFSETFROM:-0700',
+      'TZOFFSETTO:-0800',
+      'TZNAME:PST',
+      'END:STANDARD',
+      'BEGIN:DAYLIGHT',
+      'DTSTART:19700308T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+      'TZOFFSETFROM:-0800',
+      'TZOFFSETTO:-0700',
+      'TZNAME:PDT',
+      'END:DAYLIGHT',
+      'END:VTIMEZONE'
+    ];
+  }
+  return [];
+}
+
+document.getElementById('downloadIcsBtn').addEventListener('click', () => {
+  const selected = activeShifts.filter(s => s.included);
+  if (!selected.length) {
+    alert('No shifts selected to export.');
+    return;
+  }
+  const person = nameInput.value.trim() || 'Schedule';
+  const tz = tzSelect.value || 'America/Los_Angeles';
+  const now = new Date();
+  const dtstamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth()+1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}Z`;
+
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Department Schedule Converter//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${person} Work Schedule`,
+    `X-WR-TIMEZONE:${tz}`,
+    ...buildVTimezone(tz)
+  ];
+
+  selected.forEach((s, i) => {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    const dStart = s.dateObj;
+    const uid = `${ymdCompact(dStart)}-${i}-${person.toLowerCase().replace(/[^a-z0-9]/g, '')}@deptschedule.local`;
+
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${uid}`);
+    lines.push(`DTSTAMP:${dtstamp}`);
+
+    if (rule.mode === 'allday') {
+      const nextDay = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1);
+      lines.push(`DTSTART;VALUE=DATE:${ymdCompact(dStart)}`);
+      lines.push(`DTEND;VALUE=DATE:${ymdCompact(nextDay)}`);
+      lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE');
+      lines.push('TRANSP:TRANSPARENT');
+      lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
+    } else {
+      const [sh, sm] = (rule.start || '08:00').split(':');
+      const [eh, em] = (rule.end || '17:00').split(':');
+      const endDate = rule.overnight
+        ? new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1)
+        : dStart;
+      lines.push(`DTSTART;TZID=${tz}:${ymdCompact(dStart)}T${sh}${sm}00`);
+      lines.push(`DTEND;TZID=${tz}:${ymdCompact(endDate)}T${eh}${em}00`);
+      lines.push('TRANSP:TRANSPARENT');
+      lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
+    }
+
+    lines.push(`SUMMARY:${escapeIcsText(s.shift)}`);
+    lines.push(`DESCRIPTION:Work schedule shift (${escapeIcsText(s.shift)})`);
+    lines.push('END:VEVENT');
+  });
+
+  lines.push('END:VCALENDAR');
+  const icsStr = lines.join('\r\n') + '\r\n';
+  const blob = new Blob([icsStr], { type: 'text/calendar;charset=utf-8' });
+  const safePerson = person.replace(/[^A-Za-z0-9_-]+/g, '_');
+  triggerDownload(blob, `${safePerson}_Work_Schedule.ics`);
+});
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function escapeIcsText(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+renderAllRulesTable();
+</script>
+</body>
+</html>
