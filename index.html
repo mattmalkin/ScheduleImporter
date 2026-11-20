@@ -1,3040 +1,1248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Department Schedule to Outlook (.ics) Converter</title>
-
-  <!-- Mozilla PDF.js (only external library) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-  <style>
-    /* =====================================================================
-       DESIGN TOKENS & RESET
-       ===================================================================== */
-    :root {
-      --bg-page: #f4f6fa;
-      --bg-card: #ffffff;
-      --bg-subtle: #f8fafc;
-      --bg-muted: #f1f5f9;
-      --border-light: #e2e8f0;
-      --border-strong: #cbd5e1;
-
-      --text-primary: #0f172a;
-      --text-secondary: #475569;
-      --text-muted: #64748b;
-
-      --accent: #3730a3;
-      --accent-hover: #312e81;
-      --accent-soft: #eef2ff;
-      --accent-border: #c7d2fe;
-
-      --success-bg: #ecfdf5;
-      --success-border: #a7f3d0;
-      --success-text: #065f46;
-
-      --warn-bg: #fffbeb;
-      --warn-border: #fde68a;
-      --warn-text: #92400e;
-
-      --danger-bg: #fef2f2;
-      --danger-border: #fecaca;
-      --danger-text: #991b1b;
-
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
-      --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-      --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.07);
-    }
-
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      background-color: var(--bg-page);
-      color: var(--text-primary);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      font-size: 15px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    /* =====================================================================
-       LAYOUT & HEADER
-       ===================================================================== */
-    .app-header {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border-light);
-      position: sticky;
-      top: 0;
-      z-index: 40;
-    }
-
-    .header-inner {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 14px 20px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-icon {
-      width: 42px;
-      height: 42px;
-      border-radius: var(--radius-md);
-      background: linear-gradient(135deg, #3730a3, #2563eb);
-      color: #ffffff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .brand-title {
-      margin: 0;
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.01em;
-    }
-
-    .brand-subtitle {
-      margin: 2px 0 0;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .privacy-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: var(--success-bg);
-      border: 1px solid var(--success-border);
-      color: var(--success-text);
-      font-size: 0.78rem;
-      font-weight: 600;
-    }
-
-    .container {
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 20px 20px 48px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    /* =====================================================================
-       PROGRESS STEPPER BAR
-       ===================================================================== */
-    .stepper {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-    }
-
-    .step-pill {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      background: var(--bg-card);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      box-shadow: var(--shadow-sm);
-      transition: border-color 0.2s, background 0.2s, color 0.2s;
-    }
-
-    .step-pill.active {
-      border-color: var(--accent-border);
-      background: var(--accent-soft);
-      color: var(--accent);
-    }
-
-    .step-pill.done {
-      border-color: var(--success-border);
-      color: var(--success-text);
-    }
-
-    .step-num {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--bg-muted);
-      color: var(--text-secondary);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .step-pill.active .step-num {
-      background: var(--accent);
-      color: #ffffff;
-    }
-
-    .step-pill.done .step-num {
-      background: #059669;
-      color: #ffffff;
-    }
-
-    /* =====================================================================
-       CARDS & SECTION HEADERS
-       ===================================================================== */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-      overflow: hidden;
-    }
-
-    .card-header {
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border-light);
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      background: var(--bg-card);
-    }
-
-    .card-title-group {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .step-badge {
-      width: 30px;
-      height: 30px;
-      border-radius: 10px;
-      background: var(--accent-soft);
-      color: var(--accent);
-      border: 1px solid var(--accent-border);
-      font-weight: 700;
-      font-size: 0.875rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .card-title {
-      margin: 0;
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .card-desc {
-      margin: 2px 0 0;
-      font-size: 0.8125rem;
-      color: var(--text-muted);
-    }
-
-    .card-body {
-      padding: 20px;
-    }
-
-    /* =====================================================================
-       BUTTONS & FORM CONTROLS
-       ===================================================================== */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      padding: 9px 16px;
-      min-height: 38px;
-      border-radius: var(--radius-sm);
-      font-size: 0.875rem;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      border: 1px solid transparent;
-      transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
-      white-space: nowrap;
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: #ffffff;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: var(--accent-hover);
-    }
-
-    .btn-secondary {
-      background: #ffffff;
-      color: var(--text-primary);
-      border-color: var(--border-strong);
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: var(--bg-subtle);
-      border-color: #94a3b8;
-    }
-
-    .btn-soft {
-      background: var(--accent-soft);
-      color: var(--accent);
-      border-color: var(--accent-border);
-    }
-
-    .btn-soft:hover:not(:disabled) {
-      background: #e0e7ff;
-    }
-
-    .btn-danger-soft {
-      background: var(--danger-bg);
-      color: var(--danger-text);
-      border-color: var(--danger-border);
-    }
-
-    .btn-danger-soft:hover:not(:disabled) {
-      background: #fee2e2;
-    }
-
-    .btn-sm {
-      padding: 5px 10px;
-      min-height: 30px;
-      font-size: 0.78rem;
-      border-radius: 7px;
-    }
-
-    .input, .select {
-      width: 100%;
-      min-height: 38px;
-      padding: 7px 11px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      background: #ffffff;
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 0.875rem;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .input:focus, .select:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(55, 48, 163, 0.15);
-    }
-
-    .input:disabled, .select:disabled {
-      background: var(--bg-muted);
-      color: var(--text-muted);
-      cursor: not-allowed;
-    }
-
-    .input-sm, .select-sm {
-      min-height: 32px;
-      padding: 4px 8px;
-      font-size: 0.8125rem;
-    }
-
-    .field-label {
-      display: block;
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 5px;
-    }
-
-    /* =====================================================================
-       STEP 1: DROP ZONE
-       ===================================================================== */
-    .drop-zone {
-      border: 2px dashed var(--border-strong);
-      border-radius: var(--radius-md);
-      background: var(--bg-subtle);
-      padding: 28px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.18s, background 0.18s;
-    }
-
-    .drop-zone:hover, .drop-zone.drag-over {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-
-    .drop-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 14px;
-      background: #ffffff;
-      border: 1px solid var(--border-light);
-      color: var(--accent);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 10px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .loaded-banner {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      text-align: left;
-      background: #ffffff;
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-    }
-
-    .loaded-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-    }
-
-    .loaded-filename {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: var(--text-primary);
-      word-break: break-word;
-    }
-
-    .loaded-sub {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .alert-box {
-      margin-top: 14px;
-      padding: 12px 14px;
-      border-radius: var(--radius-sm);
-      font-size: 0.85rem;
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
-    .alert-danger {
-      background: var(--danger-bg);
-      border: 1px solid var(--danger-border);
-      color: var(--danger-text);
-    }
-
-    /* =====================================================================
-       STEP 2: NAME PICKER & YEAR/TZ CONTROLS
-       ===================================================================== */
-    .form-grid-3 {
-      display: grid;
-      grid-template-columns: 2fr 1fr 1.2fr;
-      gap: 14px;
-      align-items: start;
-    }
-
-    .combobox-wrap {
-      position: relative;
-    }
-
-    .combobox-dropdown {
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      right: 0;
-      max-height: 240px;
-      overflow-y: auto;
-      background: #ffffff;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      box-shadow: var(--shadow-md);
-      z-index: 50;
-    }
-
-    .combobox-item {
-      padding: 8px 12px;
-      font-size: 0.875rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .combobox-item:hover, .combobox-item.highlighted {
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-weight: 600;
-    }
-
-    .combobox-empty {
-      padding: 10px 12px;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-    }
-
-    .field-hint {
-      font-size: 0.76rem;
-      color: var(--text-muted);
-      margin-top: 5px;
-    }
-
-    /* =====================================================================
-       STEP 3: SHIFT CONFIGURATION CARDS & PRESET CHIPS
-       ===================================================================== */
-    .shift-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .shift-row-card {
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-      background: var(--bg-subtle);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      transition: border-color 0.15s;
-    }
-
-    .shift-row-card.is-unrecognized {
-      background: var(--warn-bg);
-      border-color: var(--warn-border);
-    }
-
-    .shift-row-top {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .shift-code-info {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .shift-code-pill {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.92rem;
-      font-weight: 700;
-      padding: 3px 9px;
-      border-radius: 7px;
-      background: #ffffff;
-      border: 1px solid var(--border-strong);
-      color: var(--text-primary);
-    }
-
-    .count-pill {
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: var(--bg-muted);
-      color: var(--text-secondary);
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-    }
-
-    .badge-suggested {
-      background: var(--accent-soft);
-      color: var(--accent);
-      border-color: var(--accent-border);
-    }
-
-    .badge-custom {
-      background: var(--success-bg);
-      color: var(--success-text);
-      border-color: var(--success-border);
-    }
-
-    .badge-warn {
-      background: #fef3c7;
-      color: var(--warn-text);
-      border-color: #fcd34d;
-    }
-
-    .badge-overnight {
-      background: #ede9fe;
-      color: #5b21b6;
-      border-color: #c4b5fd;
-    }
-
-    .preset-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-    }
-
-    .preset-btn {
-      padding: 4px 9px;
-      font-size: 0.74rem;
-      font-weight: 600;
-      font-family: inherit;
-      border-radius: 6px;
-      border: 1px solid var(--border-strong);
-      background: #ffffff;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.14s;
-    }
-
-    .preset-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--accent-soft);
-    }
-
-    .preset-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #ffffff;
-    }
-
-    .shift-controls-grid {
-      display: grid;
-      grid-template-columns: 120px 1fr 1.2fr 105px;
-      gap: 10px;
-      align-items: end;
-    }
-
-    .time-pair {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .time-pair .input {
-      width: auto;
-      min-width: 112px;
-      flex: 1;
-    }
-
-    .reset-link {
-      background: none;
-      border: none;
-      color: var(--accent);
-      font-size: 0.75rem;
-      font-weight: 600;
-      cursor: pointer;
-      padding: 2px 4px;
-      text-decoration: underline;
-    }
-
-    /* =====================================================================
-       COLLAPSIBLE SECTIONS (MANAGE RULES & OUTLOOK TIPS)
-       ===================================================================== */
-    .collapsible-trigger {
-      width: 100%;
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      font-family: inherit;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--text-primary);
-      cursor: pointer;
-      text-align: left;
-      transition: background 0.15s;
-    }
-
-    .collapsible-trigger:hover {
-      background: var(--bg-muted);
-    }
-
-    .chevron {
-      transition: transform 0.2s;
-      color: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .chevron.open {
-      transform: rotate(180deg);
-    }
-
-    .collapsible-panel {
-      margin-top: 12px;
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 16px;
-      background: #ffffff;
-    }
-
-    .rules-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    /* =====================================================================
-       TABLES & STATS BAR (STEP 4)
-       ===================================================================== */
-    .stats-bar {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .stat-card {
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-    }
-
-    .stat-label {
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-muted);
-    }
-
-    .stat-value {
-      font-size: 1.45rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      margin-top: 2px;
-      line-height: 1.2;
-    }
-
-    .stat-value.accent { color: var(--accent); }
-    .stat-value.warn { color: #b45309; }
-    .stat-value.muted { color: var(--text-muted); }
-
-    .table-wrap {
-      width: 100%;
-      overflow-x: auto;
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-md);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-      text-align: left;
-    }
-
-    thead th {
-      background: var(--bg-subtle);
-      border-bottom: 1px solid var(--border-light);
-      padding: 10px 12px;
-      font-size: 0.74rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-secondary);
-      white-space: nowrap;
-    }
-
-    tbody td {
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--border-light);
-      vertical-align: middle;
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr:hover {
-      background: #f8fafc;
-    }
-
-    tbody tr.row-excluded {
-      opacity: 0.55;
-      background: #fafafa;
-    }
-
-    .checkbox {
-      width: 17px;
-      height: 17px;
-      accent-color: var(--accent);
-      cursor: pointer;
-    }
-
-    .export-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-light);
-    }
-
-    .export-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .empty-box {
-      padding: 32px 20px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.88rem;
-      background: var(--bg-subtle);
-      border: 1px dashed var(--border-strong);
-      border-radius: var(--radius-md);
-    }
-
-    /* =====================================================================
-       OUTLOOK TIPS GRID
-       ===================================================================== */
-    .tips-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      margin-top: 10px;
-    }
-
-    .tip-subcard {
-      background: var(--bg-subtle);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      font-size: 0.82rem;
-      color: var(--text-secondary);
-    }
-
-    .tip-subcard h4 {
-      margin: 0 0 6px;
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-primary);
-    }
-
-    .tip-subcard ul {
-      margin: 0;
-      padding-left: 18px;
-    }
-
-    .tip-subcard li {
-      margin-bottom: 4px;
-    }
-
-    /* =====================================================================
-       TOAST NOTIFICATIONS
-       ===================================================================== */
-    .toast-container {
-      position: fixed;
-      bottom: 18px;
-      right: 18px;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-width: 360px;
-      pointer-events: none;
-    }
-
-    .toast {
-      pointer-events: auto;
-      padding: 11px 15px;
-      border-radius: var(--radius-sm);
-      color: #ffffff;
-      font-size: 0.85rem;
-      font-weight: 500;
-      box-shadow: var(--shadow-md);
-      background: #1e293b;
-      opacity: 0;
-      transform: translateY(8px);
-      transition: opacity 0.22s, transform 0.22s;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .toast.success { background: #047857; }
-    .toast.error { background: #b91c1c; }
-
-    .app-footer {
-      text-align: center;
-      padding: 16px 20px 28px;
-      font-size: 0.78rem;
-      color: var(--text-muted);
-    }
-
-    /* =====================================================================
-       RESPONSIVE BREAKPOINTS
-       ===================================================================== */
-    @media (max-width: 900px) {
-      .stepper {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      .form-grid-3 {
-        grid-template-columns: 1fr;
-      }
-      .shift-controls-grid {
-        grid-template-columns: 1fr 1fr;
-      }
-      .stats-bar {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      .tips-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 560px) {
-      .container {
-        padding: 14px 12px 36px;
-      }
-      .card-header, .card-body {
-        padding: 14px;
-      }
-      .shift-controls-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Department Schedule to Outlook (.ics) Converter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --border: #d8dee9;
+    --text: #1e293b;
+    --muted: #64748b;
+    --primary: #1d4ed8;
+    --primary-hover: #1e40af;
+    --primary-light: #eff6ff;
+    --success: #15803d;
+    --success-bg: #f0fdf4;
+    --warn: #b45309;
+    --warn-bg: #fffbeb;
+    --danger: #b91c1c;
+    --danger-bg: #fef2f2;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  header p {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: var(--primary-light);
+    color: var(--primary);
+    border: 1px solid #bfdbfe;
+  }
+  .badge.success {
+    background: var(--success-bg);
+    color: var(--success);
+    border-color: #bbf7d0;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .step-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .step-num {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .dropzone {
+    border: 2px dashed #94a3b8;
+    border-radius: var(--radius);
+    padding: 28px 18px;
+    text-align: center;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+  .dropzone strong { color: var(--primary); }
+  .alert {
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    margin-top: 12px;
+    display: none;
+  }
+  .alert.show { display: block; }
+  .alert.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+  .alert.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #fde68a; }
+  .alert.info { background: var(--primary-light); color: #1e3a8a; border: 1px solid #bfdbfe; }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+    flex: 1;
+  }
+  label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #334155;
+  }
+  input[type="text"], input[type="time"], select {
+    padding: 8px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font-size: 0.92rem;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus, select:focus {
+    outline: 2px solid #93c5fd;
+    border-color: var(--primary);
+  }
+  button {
+    padding: 8px 14px;
+    border-radius: 7px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: var(--text);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  button:hover { background: #f1f5f9; }
+  button.primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--primary-hover); }
+  button.sm {
+    padding: 4px 9px;
+    font-size: 0.78rem;
+  }
+  .shift-rule-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fcfcfd;
+  }
+  .shift-rule-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .shift-code-tag {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #0f172a;
+  }
+  .count-pill {
+    font-size: 0.76rem;
+    background: #e2e8f0;
+    color: #334155;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .printed-time-pill {
+    font-size: 0.76rem;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .preset-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .rule-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  th {
+    background: #f8fafc;
+    font-weight: 700;
+    color: #334155;
+  }
+  tr.skipped { opacity: 0.45; }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--primary);
+    user-select: none;
+  }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); font-size: 0.84rem; }
+  .export-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #e2e8f0;
+  }
+</style>
 </head>
 <body>
-
-  <!-- Toast Notification Container -->
-  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
-
-  <!-- Top Header -->
-  <header class="app-header">
-    <div class="header-inner">
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-            <path d="M9 16l2 2 4-4"></path>
-          </svg>
-        </div>
-        <div>
-          <h1 class="brand-title">Department Schedule to Outlook (.ics) Converter</h1>
-          <p class="brand-subtitle">Convert monthly &ldquo;Schedule By Name&rdquo; PDFs into clean, reminder-free Outlook calendars</p>
-        </div>
-      </div>
-
-      <div class="privacy-badge" title="All PDF parsing and calendar generation runs inside your browser">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-        </svg>
-        <span>100% local in your browser &mdash; no data leaves your device</span>
-      </div>
+<div class="container">
+  <header>
+    <div>
+      <h1>Schedule PDF to Outlook (.ics) Converter</h1>
+      <p>100% local in your browser &bull; Supports both "By Name" and "By Shift" schedule PDFs</p>
     </div>
+    <span class="badge">Free Status &bull; No Reminders</span>
   </header>
 
-  <main class="container">
-
-    <!-- Stepper Indicator -->
-    <nav class="stepper" aria-label="Workflow Steps">
-      <div id="stepper1" class="step-pill active"><span class="step-num">1</span><span>Upload PDF</span></div>
-      <div id="stepper2" class="step-pill"><span class="step-num">2</span><span>Select Name</span></div>
-      <div id="stepper3" class="step-pill"><span class="step-num">3</span><span>Shift Hours</span></div>
-      <div id="stepper4" class="step-pill"><span class="step-num">4</span><span>Preview &amp; Export</span></div>
-    </nav>
-
-    <!-- =================================================================
-         STEP 1: UPLOAD SCHEDULE PDF
-         ================================================================= -->
-    <section class="card" aria-labelledby="step1Title">
-      <div class="card-header">
-        <div class="card-title-group">
-          <span class="step-badge">1</span>
-          <div>
-            <h2 id="step1Title" class="card-title">Upload Schedule PDF</h2>
-            <p class="card-desc">Drop your monthly &ldquo;Schedule By Name&rdquo; PDF. All pages and date columns are parsed automatically.</p>
-          </div>
-        </div>
+  <!-- STEP 1: UPLOAD -->
+  <section class="card">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">1</span> Upload Monthly Schedule PDF</h2>
+      <span id="formatBadge" class="badge success hidden"></span>
+    </div>
+    <div id="dropzone" class="dropzone" tabindex="0">
+      <p style="margin:0 0 4px;"><strong>Click to choose a PDF</strong> or drag and drop it here</p>
+      <p class="muted" style="margin:0;">Works with both <em>Schedule By Name</em> and master <em>By Shift</em> PDFs. Nothing leaves your computer.</p>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" class="hidden" />
+    </div>
+    <div id="fileMeta" class="row hidden" style="margin-top:12px; align-items:center;">
+      <div class="field" style="flex:2;">
+        <span id="fileNameDisplay" style="font-weight:600;"></span>
+        <span id="dateRangeDisplay" class="muted"></span>
       </div>
-
-      <div class="card-body">
-        <input id="pdfFileInput" type="file" accept="application/pdf,.pdf" class="hidden" />
-
-        <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="Upload Schedule PDF">
-          <div class="drop-icon" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-          </div>
-          <div style="font-weight: 700; font-size: 0.96rem; color: var(--text-primary);">Drag &amp; drop your schedule PDF here</div>
-          <div style="font-size: 0.82rem; color: var(--text-muted); margin: 4px 0 14px;">or click to choose a file from your computer</div>
-          <button type="button" id="browsePdfBtn" class="btn btn-primary">Select PDF File</button>
-        </div>
-
-        <div id="loadedPdfBanner" class="loaded-banner hidden">
-          <div class="loaded-meta">
-            <div class="drop-icon" style="margin: 0; width: 42px; height: 42px;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="16" y1="13" x2="8" y2="13"></line>
-                <line x1="16" y1="17" x2="8" y2="17"></line>
-              </svg>
-            </div>
-            <div>
-              <div id="loadedFileName" class="loaded-filename"></div>
-              <div id="loadedFileMeta" class="loaded-sub"></div>
-            </div>
-          </div>
-          <button type="button" id="replacePdfBtn" class="btn btn-secondary btn-sm">Load Different PDF</button>
-        </div>
-
-        <div id="parseErrorBox" class="alert-box alert-danger hidden" role="alert">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0; margin-top:2px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-          <div id="parseErrorMsg"></div>
-        </div>
+      <div class="field" style="max-width:240px;">
+        <label for="layoutOverride">Detected Layout</label>
+        <select id="layoutOverride">
+          <option value="auto">Auto-detect</option>
+          <option value="by-name">Names on Left (By Name)</option>
+          <option value="by-shift">Shifts on Left (By Shift)</option>
+        </select>
       </div>
-    </section>
+    </div>
+    <div id="uploadError" class="alert error"></div>
+  </section>
 
-    <!-- =================================================================
-         STEP 2: SELECT OR ENTER YOUR NAME
-         ================================================================= -->
-    <section class="card" aria-labelledby="step2Title">
-      <div class="card-header">
-        <div class="card-title-group">
-          <span class="step-badge">2</span>
-          <div>
-            <h2 id="step2Title" class="card-title">Select or Enter Your Name</h2>
-            <p class="card-desc">Choose your name from the uploaded schedule (or type it manually). Your selection is remembered locally.</p>
-          </div>
-        </div>
+  <!-- STEP 2: NAME & TIMEZONE -->
+  <section id="step2" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">2</span> Select or Enter Your Name</h2>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="nameSelect">Detected Names in Schedule</label>
+        <select id="nameSelect"></select>
       </div>
+      <div class="field">
+        <label for="nameInput">Or Type Name Exactly as Listed</label>
+        <input type="text" id="nameInput" placeholder="e.g. Malkin" />
+      </div>
+      <div class="field">
+        <label for="tzSelect">Calendar Time Zone</label>
+        <select id="tzSelect">
+          <option value="America/Los_Angeles" selected>Pacific Time (America/Los_Angeles)</option>
+          <option value="America/Denver">Mountain Time (America/Denver)</option>
+          <option value="America/Chicago">Central Time (America/Chicago)</option>
+          <option value="America/New_York">Eastern Time (America/New_York)</option>
+        </select>
+      </div>
+    </div>
+    <div id="nameAlert" class="alert warn"></div>
+  </section>
 
-      <div class="card-body">
-        <div class="form-grid-3">
-          <!-- Searchable Name Combobox -->
-          <div>
-            <label for="facultyNameInput" class="field-label">Your Name (as listed on schedule)</label>
-            <div class="combobox-wrap" id="nameCombobox">
-              <input
-                id="facultyNameInput"
-                type="text"
-                class="input"
-                autocomplete="off"
-                placeholder="Type or select your name..."
-                aria-autocomplete="list"
-                aria-expanded="false"
-              />
-              <div id="nameDropdown" class="combobox-dropdown hidden" role="listbox"></div>
-            </div>
-            <div id="nameHelperText" class="field-hint">Upload a PDF to auto-populate all department names, or type your name now.</div>
+  <!-- STEP 3: DEFINE SHIFT HOURS -->
+  <section id="step3" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">3</span> Confirm Shift Hours</h2>
+      <span class="muted">Changes save automatically in your browser</span>
+    </div>
+    <div id="shiftRulesContainer"></div>
+
+    <details style="margin-top:14px;">
+      <summary>Manage All Saved Shift Rules &amp; Presets (Import / Export JSON)</summary>
+      <div style="margin-top:12px;">
+        <div class="row" style="margin-bottom:10px;">
+          <div class="field">
+            <label for="newRuleCode">Shift Code</label>
+            <input type="text" id="newRuleCode" placeholder="e.g. PREP, Late 4, UT12" />
           </div>
-
-          <!-- Year Override -->
-          <div>
-            <label for="yearOverrideSelect" class="field-label">Schedule Start Year</label>
-            <select id="yearOverrideSelect" class="select">
-              <option value="auto">Auto-detect from weekdays</option>
+          <div class="field" style="max-width:150px;">
+            <label for="newRuleMode">Type</label>
+            <select id="newRuleMode">
+              <option value="timed">Timed</option>
+              <option value="allday">All-Day</option>
+              <option value="skip">Skip</option>
             </select>
-            <div id="yearHelperText" class="field-hint">Handles Dec &rarr; Jan rollovers automatically.</div>
           </div>
-
-          <!-- Time Zone -->
-          <div>
-            <label for="timeZoneSelect" class="field-label">Calendar Time Zone</label>
-            <select id="timeZoneSelect" class="select"></select>
-            <div class="field-hint">Defaults to your device&rsquo;s local time zone.</div>
+          <div class="field" style="max-width:130px;">
+            <label for="newRuleStart">Start</label>
+            <input type="time" id="newRuleStart" value="08:00" />
           </div>
+          <div class="field" style="max-width:130px;">
+            <label for="newRuleEnd">End</label>
+            <input type="time" id="newRuleEnd" value="17:00" />
+          </div>
+          <button type="button" id="addRuleBtn" class="primary">Save Rule</button>
         </div>
+        <div class="row" style="margin-bottom:10px;">
+          <button type="button" id="exportRulesBtn">Export Rules (JSON)</button>
+          <button type="button" id="importRulesBtn">Import Rules (JSON)</button>
+          <button type="button" id="resetRulesBtn">Reset to Defaults</button>
+          <input type="file" id="importRulesInput" accept="application/json,.json" class="hidden" />
+        </div>
+        <div id="allRulesTableWrap" style="max-height:240px; overflow:auto; border:1px solid #e2e8f0; border-radius:7px;"></div>
       </div>
-    </section>
+    </details>
+  </section>
 
-    <!-- =================================================================
-         STEP 3: DEFINE SHIFT HOURS (WITH PRE-POPULATED SUGGESTIONS)
-         ================================================================= -->
-    <section class="card" aria-labelledby="step3Title">
-      <div class="card-header">
-        <div class="card-title-group">
-          <span class="step-badge">3</span>
-          <div>
-            <h2 id="step3Title" class="card-title">Define Shift Hours</h2>
-            <p class="card-desc">Review the shift codes found on your rows. Common shifts come with pre-populated suggestions you can customize in one click.</p>
-          </div>
-        </div>
-      </div>
+  <!-- STEP 4: PREVIEW & EXPORT -->
+  <section id="step4" class="card hidden">
+    <div class="step-header">
+      <h2 class="step-title"><span class="step-num">4</span> Preview &amp; Download Outlook Calendar (.ics)</h2>
+      <span id="eventCountBadge" class="badge"></span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:42px;">Inc.</th>
+            <th>Date</th>
+            <th>Day</th>
+            <th>Shift Title</th>
+            <th>Hours</th>
+            <th>Availability</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+    <div class="export-bar">
+      <span class="muted">All events export as <strong>Free</strong> (won't block meeting invites) with <strong>zero reminders</strong>.</span>
+      <button type="button" id="downloadIcsBtn" class="primary" style="font-size:0.96rem; padding:10px 18px;">Download .ics File</button>
+    </div>
+  </section>
+</div>
 
-      <div class="card-body">
-        <div id="step3Empty" class="empty-box">
-          Upload a schedule PDF and select your name above to see and configure your shifts for the month.
-        </div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        <div id="detectedShiftsList" class="shift-list hidden"></div>
+const STORAGE_RULES_KEY = 'dept_sched_rules_v3';
+const STORAGE_NAME_KEY = 'dept_sched_last_name_v3';
+const STORAGE_TZ_KEY = 'dept_sched_tz_v3';
 
-        <!-- Collapsible Manage All Saved Shift Rules -->
-        <div style="margin-top: 20px;">
-          <button type="button" id="toggleRulesManagerBtn" class="collapsible-trigger" aria-expanded="false">
-            <span>Manage All Saved Shift Rules &amp; Shareable Presets (<span id="savedRulesCount">0</span> custom rules)</span>
-            <svg id="rulesManagerChevron" class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
+const DEFAULT_EXACT_RULES = {
+  'PREP':    { mode: 'timed', start: '08:00', end: '17:00', overnight: false },
+  'Late 4':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 5':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 10': { mode: 'timed', start: '10:00', end: '20:00', overnight: false },
+  'UT12':    { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 12':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 10':  { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'PACU':    { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'Chief':   { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'OB-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WD-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WE-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'PM-1':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false },
+  'PM-2':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false }
+};
 
-          <div id="rulesManagerPanel" class="collapsible-panel hidden">
-            <div class="rules-toolbar">
-              <div style="font-size: 0.82rem; color: var(--text-secondary);">
-                Define reusable <strong>Exact</strong> or <strong>Prefix</strong> (e.g., <code>Adm-</code>) rules. Custom rules override built-in suggestions and save automatically.
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-                <button type="button" id="addCustomRuleBtn" class="btn btn-soft btn-sm">+ Add Rule</button>
-                <button type="button" id="exportRulesJsonBtn" class="btn btn-secondary btn-sm">Export Rules JSON</button>
-                <button type="button" id="importRulesJsonBtn" class="btn btn-secondary btn-sm">Import Rules JSON</button>
-                <input id="importRulesFileInput" type="file" accept="application/json,.json" class="hidden" />
-                <button type="button" id="resetAllRulesBtn" class="btn btn-danger-soft btn-sm">Reset to Defaults</button>
-              </div>
-            </div>
+const DEFAULT_PREFIX_RULES = [
+  { prefix: 'Adm-',     rule: { mode: 'allday' } },
+  { prefix: 'Mtg-',     rule: { mode: 'allday' } },
+  { prefix: 'Leave-',   rule: { mode: 'skip' } },
+  { prefix: 'FMLA-',    rule: { mode: 'skip' } },
+  { prefix: 'Off-',     rule: { mode: 'skip' } },
+  { prefix: 'Post-C',   rule: { mode: 'skip' } },
+  { prefix: 'PAV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: '48X-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'SDS',      rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'CTV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
+  { prefix: 'Ped-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } }
+];
 
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Pattern</th>
-                    <th>Match</th>
-                    <th>Mode</th>
-                    <th>Start &ndash; End</th>
-                    <th>Custom Title (Optional)</th>
-                    <th>Status</th>
-                    <th style="text-align: right;">Remove</th>
-                  </tr>
-                </thead>
-                <tbody id="customRulesTableBody"></tbody>
-              </table>
-            </div>
-            <div id="noCustomRulesHint" class="field-hint" style="margin-top: 8px;">
-              No custom rules saved yet &mdash; built-in department suggestions are active. Edit any shift above or click <strong>+ Add Rule</strong> to customize.
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+const TIME_PRESETS = [
+  { label: '7a–3p',   mode: 'timed', start: '07:00', end: '15:00', overnight: false },
+  { label: '7a–5p',   mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  { label: '7a–7p',   mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  { label: '8a–5p',   mode: 'timed', start: '08:00', end: '17:00', overnight: false },
+  { label: 'All-Day', mode: 'allday' },
+  { label: 'Skip',    mode: 'skip' }
+];
 
-    <!-- =================================================================
-         STEP 4: PREVIEW & EXPORT OUTLOOK CALENDAR (.ICS)
-         ================================================================= -->
-    <section class="card" aria-labelledby="step4Title">
-      <div class="card-header">
-        <div class="card-title-group">
-          <span class="step-badge">4</span>
-          <div>
-            <h2 id="step4Title" class="card-title">Preview &amp; Export Outlook Calendar (.ics)</h2>
-            <p class="card-desc">Verify every shift, make any one-off adjustments, and export a reminder-free <code>.ics</code> file.</p>
-          </div>
-        </div>
-      </div>
+const NON_NAME_TOKENS = new Set([
+  'Faculty', 'Full-time', 'Availability', 'Week', 'Shift', 'Times', 'Shift Times',
+  'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Schedule By Name', 'TBD'
+]);
 
-      <div class="card-body">
-        <!-- Summary Stats Bar -->
-        <div class="stats-bar">
-          <div class="stat-card">
-            <div class="stat-label">Events to Export</div>
-            <div id="statExportCount" class="stat-value">0</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Timed Shifts</div>
-            <div id="statTimedCount" class="stat-value accent">0</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">All-Day Events</div>
-            <div id="statAllDayCount" class="stat-value warn">0</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Skipped / Excluded</div>
-            <div id="statSkippedCount" class="stat-value muted">0</div>
-          </div>
-        </div>
+let savedRules = loadRules();
+let pdfPagesItems = [];
+let currentFileName = '';
+let detectedLayout = 'by-name';
+let parsedSchedule = null; // { layout, names: [], getShiftsForName(name), dateSpanText }
+let activeShifts = [];     // [{ id, dateObj, dateStr, dow, shift, printedTime, included }]
 
-        <div id="step4Empty" class="empty-box">
-          No shifts ready to preview yet. Upload a PDF and select your name to generate your schedule preview.
-        </div>
+function loadRules() {
+  try {
+    const raw = localStorage.getItem(STORAGE_RULES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_EXACT_RULES));
+}
 
-        <div id="previewTableContainer" class="table-wrap hidden">
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 38px;">
-                  <input id="selectAllEventsCheckbox" type="checkbox" class="checkbox" checked title="Include or exclude all visible events" />
-                </th>
-                <th>Date</th>
-                <th>Day</th>
-                <th>Shift Code</th>
-                <th>Event Title</th>
-                <th>Time / All-Day</th>
-                <th>Busy / Free</th>
-              </tr>
-            </thead>
-            <tbody id="previewTableBody"></tbody>
-          </table>
-        </div>
+function saveRules() {
+  try {
+    localStorage.setItem(STORAGE_RULES_KEY, JSON.stringify(savedRules));
+  } catch (e) {}
+  renderAllRulesTable();
+}
 
-        <!-- Export Actions Bar -->
-        <div class="export-bar">
-          <div style="font-size: 0.82rem; color: var(--text-muted);">
-            <strong style="color: var(--text-primary);">No Reminders Included:</strong> All <code>VALARM</code> blocks are omitted from exported events.
-          </div>
-          <div class="export-actions">
-            <button type="button" id="copyIcsBtn" class="btn btn-secondary" disabled>Copy .ics Text</button>
-            <button type="button" id="downloadIcsBtn" class="btn btn-primary" disabled>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span id="downloadBtnText">Download Outlook Calendar (.ics)</span>
-            </button>
-          </div>
-        </div>
+function getRuleForShift(shiftCode, printedTime) {
+  const clean = (shiftCode || '').trim();
+  if (savedRules[clean]) return { ...savedRules[clean], source: 'saved' };
+  const lower = clean.toLowerCase();
+  for (const [k, v] of Object.entries(savedRules)) {
+    if (k.toLowerCase() === lower) return { ...v, source: 'saved' };
+  }
+  for (const p of DEFAULT_PREFIX_RULES) {
+    if (lower.startsWith(p.prefix.toLowerCase())) {
+      return { ...p.rule, source: 'suggested' };
+    }
+  }
+  // If Shift-on-Left PDF has explicit start-end like 7:00-19:00
+  if (printedTime) {
+    const m = printedTime.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+    if (m) {
+      const sh = m[1].padStart(2, '0') + ':' + m[2];
+      const eh = m[3].padStart(2, '0') + ':' + m[4];
+      return { mode: 'timed', start: sh, end: eh, overnight: eh <= sh, source: 'pdf-time' };
+    }
+  }
+  return { mode: 'allday', start: '08:00', end: '17:00', overnight: false, source: 'default' };
+}
 
-        <!-- Collapsible Outlook Import & No-Reminders Tip -->
-        <div style="margin-top: 18px;">
-          <button type="button" id="toggleOutlookTipBtn" class="collapsible-trigger" aria-expanded="false">
-            <span>Outlook Import Instructions &amp; Tip for Preventing Default Reminders</span>
-            <svg id="outlookTipChevron" class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
+// --- PDF EXTRACTION ---
+async function extractPdfTextItems(arrayBuffer) {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    const items = [];
+    for (const item of tc.items) {
+      const str = (item.str || '').trim();
+      if (!str) continue;
+      const x0 = item.transform[4];
+      const y0 = item.transform[5];
+      const w = item.width || (str.length * 4);
+      items.push({ x0, y0, x1: x0 + w, xc: x0 + w / 2, str });
+    }
+    pages.push(items);
+  }
+  return pages;
+}
 
-          <div id="outlookTipPanel" class="collapsible-panel hidden">
-            <div style="font-size: 0.84rem; color: var(--text-secondary);">
-              The generated <code>.ics</code> file intentionally omits all <code>VALARM</code> reminder tags. However, some versions of Outlook automatically apply your personal default reminder to newly imported items.
-            </div>
-            <div class="tips-grid">
-              <div class="tip-subcard">
-                <h4>How to Import into Outlook</h4>
-                <ul>
-                  <li><strong>Outlook Desktop:</strong> Double-click the downloaded <code>.ics</code> file, or use <em>File &rarr; Open &amp; Export &rarr; Import/Export &rarr; Import an iCalendar (.ics)</em>.</li>
-                  <li><strong>New Outlook / Web:</strong> Open <em>Calendar &rarr; Add calendar &rarr; Upload from file</em>, select your <code>.ics</code> file, and pick your target calendar.</li>
-                </ul>
-              </div>
-              <div class="tip-subcard">
-                <h4>If Outlook Still Adds Default Reminders</h4>
-                <ul>
-                  <li><strong>Classic Outlook:</strong> Go to <em>File &rarr; Options &rarr; Calendar</em>, temporarily uncheck <strong>Default reminders</strong>, import the file, then re-enable it.</li>
-                  <li><strong>New Outlook / Web:</strong> Open <em>Settings (gear) &rarr; Calendar &rarr; Events and invitations</em>, set <strong>Default reminder</strong> to <strong>None</strong> while importing, then switch it back.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+function inferYearForDates(dateList) {
+  // dateList: [{ month, day, dow }]
+  const nowYear = new Date().getFullYear();
+  const candidates = [nowYear - 1, nowYear, nowYear + 1, nowYear + 2];
+  const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  let bestYear = nowYear;
+  let bestScore = -1;
 
-  </main>
-
-  <footer class="app-footer">
-    Department Schedule to Outlook (.ics) Converter &middot; Runs 100% client-side using Mozilla PDF.js &middot; Share this single HTML file with any colleague.
-  </footer>
-
-  <!-- Hidden textarea for iframe-safe clipboard copy -->
-  <textarea id="clipboardHelper" class="sr-only" aria-hidden="true"></textarea>
-
-  <script>
-    (function () {
-      'use strict';
-
-      // =====================================================================
-      // 1. CONSTANTS, BUILT-IN SUGGESTIONS & VTIMEZONE DEFINITIONS
-      // =====================================================================
-      const STORAGE_KEY = 'dept_schedule_ics_v2';
-
-      const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const DOW_MAP = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
-
-      // Quick one-click preset definitions for Step 3
-      const SHIFT_PRESETS = [
-        { label: '7a–3p',   mode: 'timed',  startTime: '07:00', endTime: '15:00' },
-        { label: '7a–5p',   mode: 'timed',  startTime: '07:00', endTime: '17:00' },
-        { label: '7a–7p',   mode: 'timed',  startTime: '07:00', endTime: '19:00' },
-        { label: '8a–5p',   mode: 'timed',  startTime: '08:00', endTime: '17:00' },
-        { label: 'All-Day', mode: 'allday', startTime: '08:00', endTime: '17:00' },
-        { label: 'Skip',    mode: 'skip',   startTime: '08:00', endTime: '17:00' },
-      ];
-
-      // Pre-populated department shift suggestions (never mutate)
-      const SUGGESTED_RULES = [
-        // Exact timed shifts
-        { pattern: 'PREP',          matchType: 'exact',  mode: 'timed',  startTime: '08:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Late 4',        matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'Late 5',        matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'Late 10',       matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'UT12',          matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'UT2 12',        matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'PL-1(7A7P)',    matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '19:00', busyStatus: 'BUSY' },
-        { pattern: 'SDS11',         matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'PACU',          matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'OB',            matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'APS',           matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Neuro/Spine',   matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Critical Care', matchType: 'exact',  mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-
-        // Prefix clinical shifts (7a-5p default)
-        { pattern: 'PAV-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: '48X-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'SDS-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Ped-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'CTV-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Chief',         matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'APS-',          matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-        { pattern: 'Critical Care', matchType: 'prefix', mode: 'timed',  startTime: '07:00', endTime: '17:00', busyStatus: 'BUSY' },
-
-        // Admin days -> All-Day
-        { pattern: 'Adm-',          matchType: 'prefix', mode: 'allday', startTime: '08:00', endTime: '17:00', busyStatus: 'BUSY' },
-
-        // Time off / Post-call -> Skip by default
-        { pattern: 'Leave-',        matchType: 'prefix', mode: 'skip',   startTime: '08:00', endTime: '17:00', busyStatus: 'FREE' },
-        { pattern: 'FMLA-',         matchType: 'prefix', mode: 'skip',   startTime: '08:00', endTime: '17:00', busyStatus: 'FREE' },
-        { pattern: 'Off-',          matchType: 'prefix', mode: 'skip',   startTime: '08:00', endTime: '17:00', busyStatus: 'FREE' },
-        { pattern: 'Post-C',        matchType: 'prefix', mode: 'skip',   startTime: '08:00', endTime: '17:00', busyStatus: 'FREE' },
-      ];
-
-      // Standard RFC 5545 VTIMEZONE blocks for major US zones
-      const VTIMEZONE_DEFS = {
-        'America/Los_Angeles': [
-          'BEGIN:VTIMEZONE', 'TZID:America/Los_Angeles',
-          'BEGIN:STANDARD', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'TZOFFSETFROM:-0700', 'TZOFFSETTO:-0800', 'TZNAME:PST', 'END:STANDARD',
-          'BEGIN:DAYLIGHT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'TZOFFSETFROM:-0800', 'TZOFFSETTO:-0700', 'TZNAME:PDT', 'END:DAYLIGHT',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'America/Denver': [
-          'BEGIN:VTIMEZONE', 'TZID:America/Denver',
-          'BEGIN:STANDARD', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'TZOFFSETFROM:-0600', 'TZOFFSETTO:-0700', 'TZNAME:MST', 'END:STANDARD',
-          'BEGIN:DAYLIGHT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'TZOFFSETFROM:-0700', 'TZOFFSETTO:-0600', 'TZNAME:MDT', 'END:DAYLIGHT',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'America/Phoenix': [
-          'BEGIN:VTIMEZONE', 'TZID:America/Phoenix',
-          'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:-0700', 'TZOFFSETTO:-0700', 'TZNAME:MST', 'END:STANDARD',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'America/Chicago': [
-          'BEGIN:VTIMEZONE', 'TZID:America/Chicago',
-          'BEGIN:STANDARD', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'TZOFFSETFROM:-0500', 'TZOFFSETTO:-0600', 'TZNAME:CST', 'END:STANDARD',
-          'BEGIN:DAYLIGHT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'TZOFFSETFROM:-0600', 'TZOFFSETTO:-0500', 'TZNAME:CDT', 'END:DAYLIGHT',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'America/New_York': [
-          'BEGIN:VTIMEZONE', 'TZID:America/New_York',
-          'BEGIN:STANDARD', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'TZOFFSETFROM:-0400', 'TZOFFSETTO:-0500', 'TZNAME:EST', 'END:STANDARD',
-          'BEGIN:DAYLIGHT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'TZOFFSETFROM:-0500', 'TZOFFSETTO:-0400', 'TZNAME:EDT', 'END:DAYLIGHT',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'America/Anchorage': [
-          'BEGIN:VTIMEZONE', 'TZID:America/Anchorage',
-          'BEGIN:STANDARD', 'DTSTART:19701101T020000', 'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU', 'TZOFFSETFROM:-0800', 'TZOFFSETTO:-0900', 'TZNAME:AKST', 'END:STANDARD',
-          'BEGIN:DAYLIGHT', 'DTSTART:19700308T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU', 'TZOFFSETFROM:-0900', 'TZOFFSETTO:-0800', 'TZNAME:AKDT', 'END:DAYLIGHT',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-        'Pacific/Honolulu': [
-          'BEGIN:VTIMEZONE', 'TZID:Pacific/Honolulu',
-          'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:-1000', 'TZOFFSETTO:-1000', 'TZNAME:HST', 'END:STANDARD',
-          'END:VTIMEZONE'
-        ].join('\r\n'),
-      };
-
-      // Configure PDF.js worker
-      if (window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  for (const startYear of candidates) {
+    let score = 0;
+    let yr = startYear;
+    let prevM = null;
+    for (const d of dateList) {
+      if (prevM !== null && d.month < prevM) yr += 1;
+      prevM = d.month;
+      if (d.dow && dowNames.includes(d.dow)) {
+        const dt = new Date(yr, d.month - 1, d.day);
+        if (dowNames[dt.getDay()] === d.dow) score++;
       }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestYear = startYear;
+    }
+  }
+  return bestYear;
+}
 
-      // =====================================================================
-      // 2. APPLICATION STATE & PERSISTENCE
-      // =====================================================================
-      const localBrowserTZ = getBrowserTimeZone();
-      let appState = loadPersistedState();
+function extractDateColumnsFromPage(items) {
+  const dateTokens = items.filter(it => /^\d{1,2}\s*\/\s*\d{1,2}$/.test(it.str));
+  if (!dateTokens.length) return [];
+  // Find y band with most MM/DD tokens (header row)
+  const bands = [];
+  for (const dt of dateTokens) {
+    let b = bands.find(x => Math.abs(x.y - dt.y0) < 4);
+    if (!b) { b = { y: dt.y0, items: [] }; bands.push(b); }
+    b.items.push(dt);
+  }
+  bands.sort((a, b) => b.items.length - a.items.length);
+  const headerDates = bands[0].items.sort((a, b) => a.xc - b.xc);
+  const headerY = bands[0].y;
 
-      // Runtime (non-persisted) PDF & preview data
-      let parsedPdf = null;        // { fileName, numPages, pages: [{ pageNum, items }] }
-      let discoveredNames = [];    // Sorted unique faculty names across all pages
-      let dateRangeInfo = null;    // { firstCol, lastCol, inferredYear, yearSource }
-      let rawUserShifts = [];      // All shifts found for selected name [{ dateStr, year, month, day, dow, rawCode }]
-      let previewEvents = [];      // Generated calendar events with inline overrides
-      let resetConfirmPending = false;
+  const validDows = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+  const dowTokens = items.filter(it => validDows.has(it.str) && Math.abs(it.y0 - headerY) < 16);
 
-      function getBrowserTimeZone() {
-        try {
-          return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles';
-        } catch (_) {
-          return 'America/Los_Angeles';
-        }
-      }
+  return headerDates.map(d => {
+    const parts = d.str.split('/').map(s => parseInt(s.trim(), 10));
+    let nearestDow = '';
+    let minDx = 999;
+    for (const dw of dowTokens) {
+      const dx = Math.abs(dw.xc - d.xc);
+      if (dx < minDx) { minDx = dx; nearestDow = dw.str; }
+    }
+    return {
+      xc: d.xc,
+      raw: `${parts[0]}/${parts[1]}`,
+      month: parts[0],
+      day: parts[1],
+      dow: minDx < 18 ? nearestDow : ''
+    };
+  });
+}
 
-      function loadPersistedState() {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (!raw) {
-            return {
-              selectedName: '',
-              yearOverride: 'auto',
-              timeZone: localBrowserTZ,
-              customRules: [],
-            };
-          }
-          const parsed = JSON.parse(raw);
-          return {
-            selectedName: typeof parsed.selectedName === 'string' ? parsed.selectedName : '',
-            yearOverride: parsed.yearOverride || 'auto',
-            timeZone: parsed.timeZone || localBrowserTZ,
-            customRules: Array.isArray(parsed.customRules) ? parsed.customRules : [],
-          };
-        } catch (err) {
-          console.warn('Could not load saved state:', err);
-          return { selectedName: '', yearOverride: 'auto', timeZone: localBrowserTZ, customRules: [] };
-        }
-      }
+function detectPdfLayout(pages) {
+  let hasShiftTimes = false;
+  let hasFacultyHeader = false;
+  let hasScheduleByNameTitle = false;
 
-      function persistState() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-        } catch (err) {
-          console.warn('Could not save state to localStorage:', err);
-        }
-      }
+  for (const items of pages) {
+    for (const it of items) {
+      if (/shift\s*times?/i.test(it.str)) hasShiftTimes = true;
+      if (/^faculty$/i.test(it.str)) hasFacultyHeader = true;
+      if (/schedule\s*by\s*name/i.test(it.str)) hasScheduleByNameTitle = true;
+    }
+  }
+  if (hasFacultyHeader || hasScheduleByNameTitle) return 'by-name';
+  if (hasShiftTimes) return 'by-shift';
+  return 'by-name';
+}
 
-      // =====================================================================
-      // 3. DOM REFERENCES
-      // =====================================================================
-      const el = {
-        toastContainer: document.getElementById('toastContainer'),
-        clipboardHelper: document.getElementById('clipboardHelper'),
+function isLikelyPersonName(str) {
+  if (!str || str.length < 2) return false;
+  if (NON_NAME_TOKENS.has(str)) return false;
+  if (/^\d/.test(str)) return false;
+  if (/^(PREP|Late|UT\d|PAV-|48X-|Adm-|Leave-|FMLA-|Off-|Post-C|SDS|CTV-|Ped-|OB|PM-|WD-|WE-|APS|PACU|Chief|POCUS|Neuro|Ortho|ENT|Urology|Robotics|Critical|Transplant|Liver|GI-|Burn|Airway|CC-|3R|PL-|Mtg-|WE-)/i.test(str)) return false;
+  if (/\b(BU|WED|WN|WE|INT|PC)\b/i.test(str)) return false;
+  if (/\.xlsx$/i.test(str)) return false;
+  return /^[A-Za-z][A-Za-z\s\-'.()]+$/.test(str);
+}
 
-        stepper1: document.getElementById('stepper1'),
-        stepper2: document.getElementById('stepper2'),
-        stepper3: document.getElementById('stepper3'),
-        stepper4: document.getElementById('stepper4'),
+function buildParser(pages, layout) {
+  // Collect all date columns across pages to assign continuous years
+  const pageDateCols = pages.map(items => extractDateColumnsFromPage(items));
+  const flatDates = pageDateCols.flat();
+  if (flatDates.length < 5) {
+    throw new Error('Could not find recognizable MM/DD date columns at the top of this PDF. Make sure the file is a text-based schedule PDF (not a scanned image).');
+  }
 
-        pdfFileInput: document.getElementById('pdfFileInput'),
-        dropZone: document.getElementById('dropZone'),
-        browsePdfBtn: document.getElementById('browsePdfBtn'),
-        loadedPdfBanner: document.getElementById('loadedPdfBanner'),
-        loadedFileName: document.getElementById('loadedFileName'),
-        loadedFileMeta: document.getElementById('loadedFileMeta'),
-        replacePdfBtn: document.getElementById('replacePdfBtn'),
-        parseErrorBox: document.getElementById('parseErrorBox'),
-        parseErrorMsg: document.getElementById('parseErrorMsg'),
+  const startYear = inferYearForDates(flatDates);
+  let curYear = startYear;
+  let prevM = null;
+  const dowNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-        nameCombobox: document.getElementById('nameCombobox'),
-        facultyNameInput: document.getElementById('facultyNameInput'),
-        nameDropdown: document.getElementById('nameDropdown'),
-        nameHelperText: document.getElementById('nameHelperText'),
-        yearOverrideSelect: document.getElementById('yearOverrideSelect'),
-        yearHelperText: document.getElementById('yearHelperText'),
-        timeZoneSelect: document.getElementById('timeZoneSelect'),
+  for (const cols of pageDateCols) {
+    for (const c of cols) {
+      if (prevM !== null && c.month < prevM) curYear += 1;
+      prevM = c.month;
+      c.year = curYear;
+      c.dateObj = new Date(curYear, c.month - 1, c.day);
+      c.dow = dowNames[c.dateObj.getDay()];
+      c.iso = `${curYear}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`;
+    }
+  }
 
-        step3Empty: document.getElementById('step3Empty'),
-        detectedShiftsList: document.getElementById('detectedShiftsList'),
-        toggleRulesManagerBtn: document.getElementById('toggleRulesManagerBtn'),
-        rulesManagerChevron: document.getElementById('rulesManagerChevron'),
-        rulesManagerPanel: document.getElementById('rulesManagerPanel'),
-        savedRulesCount: document.getElementById('savedRulesCount'),
-        addCustomRuleBtn: document.getElementById('addCustomRuleBtn'),
-        exportRulesJsonBtn: document.getElementById('exportRulesJsonBtn'),
-        importRulesJsonBtn: document.getElementById('importRulesJsonBtn'),
-        importRulesFileInput: document.getElementById('importRulesFileInput'),
-        resetAllRulesBtn: document.getElementById('resetAllRulesBtn'),
-        customRulesTableBody: document.getElementById('customRulesTableBody'),
-        noCustomRulesHint: document.getElementById('noCustomRulesHint'),
+  const firstD = flatDates[0];
+  const lastD = flatDates[flatDates.length - 1];
+  const dateSpanText = `${firstD.month}/${firstD.day}/${firstD.year} – ${lastD.month}/${lastD.day}/${lastD.year} (${flatDates.length} days)`;
 
-        statExportCount: document.getElementById('statExportCount'),
-        statTimedCount: document.getElementById('statTimedCount'),
-        statAllDayCount: document.getElementById('statAllDayCount'),
-        statSkippedCount: document.getElementById('statSkippedCount'),
-        step4Empty: document.getElementById('step4Empty'),
-        previewTableContainer: document.getElementById('previewTableContainer'),
-        selectAllEventsCheckbox: document.getElementById('selectAllEventsCheckbox'),
-        previewTableBody: document.getElementById('previewTableBody'),
-        copyIcsBtn: document.getElementById('copyIcsBtn'),
-        downloadIcsBtn: document.getElementById('downloadIcsBtn'),
-        downloadBtnText: document.getElementById('downloadBtnText'),
+  if (layout === 'by-name') {
+    const namesSet = new Set();
+    const pageRows = pages.map((items, pIdx) => {
+      const cols = pageDateCols[pIdx];
+      if (!cols.length) return [];
+      const minDateX = cols[0].xc - 15;
+      // Left-column labels have x0 < minDateX - 10
+      const leftItems = items.filter(it => it.x0 < minDateX - 8 && isLikelyPersonName(it.str));
+      leftItems.forEach(it => namesSet.add(it.str));
+      return { items, cols, leftItems, minDateX };
+    });
 
-        toggleOutlookTipBtn: document.getElementById('toggleOutlookTipBtn'),
-        outlookTipChevron: document.getElementById('outlookTipChevron'),
-        outlookTipPanel: document.getElementById('outlookTipPanel'),
-      };
+    const names = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
+    if (!names.length) {
+      throw new Error('Detected "By Name" layout, but no faculty names were found in the left column. Try switching Detected Layout to "Shifts on Left (By Shift)".');
+    }
 
-      // =====================================================================
-      // 4. INITIALIZE STATIC CONTROLS (YEAR & TIMEZONE DROPDOWNS)
-      // =====================================================================
-      function initControls() {
-        // Populate Year Override options (currentYear - 1 through currentYear + 2)
-        const nowYear = new Date().getFullYear();
-        for (let y = nowYear - 1; y <= nowYear + 2; y++) {
-          const opt = document.createElement('option');
-          opt.value = String(y);
-          opt.textContent = String(y);
-          el.yearOverrideSelect.appendChild(opt);
-        }
-        el.yearOverrideSelect.value = appState.yearOverride;
-
-        // Populate Time Zone selector
-        const tzOptions = [
-          { value: 'America/Los_Angeles', label: 'Pacific Time (America/Los_Angeles)' },
-          { value: 'America/Denver',      label: 'Mountain Time (America/Denver)' },
-          { value: 'America/Phoenix',     label: 'Arizona (America/Phoenix)' },
-          { value: 'America/Chicago',     label: 'Central Time (America/Chicago)' },
-          { value: 'America/New_York',    label: 'Eastern Time (America/New_York)' },
-          { value: 'America/Anchorage',   label: 'Alaska Time (America/Anchorage)' },
-          { value: 'Pacific/Honolulu',    label: 'Hawaii Time (Pacific/Honolulu)' },
-        ];
-
-        // Add browser's local time zone if it's not already in the list
-        if (localBrowserTZ && !tzOptions.some((t) => t.value === localBrowserTZ)) {
-          tzOptions.unshift({ value: localBrowserTZ, label: `Local Device (${localBrowserTZ})` });
-        }
-        if (appState.timeZone && !tzOptions.some((t) => t.value === appState.timeZone)) {
-          tzOptions.unshift({ value: appState.timeZone, label: appState.timeZone });
-        }
-
-        tzOptions.forEach((tz) => {
-          const opt = document.createElement('option');
-          opt.value = tz.value;
-          opt.textContent = tz.label;
-          el.timeZoneSelect.appendChild(opt);
-        });
-        el.timeZoneSelect.value = appState.timeZone;
-
-        // Restore saved name (never hardcoded)
-        el.facultyNameInput.value = appState.selectedName;
-
-        renderCustomRulesManager();
-        updateStepperState();
-      }
-
-      // =====================================================================
-      // 5. TOAST NOTIFICATIONS & HELPERS
-      // =====================================================================
-      function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        el.toastContainer.appendChild(toast);
-        requestAnimationFrame(() => toast.classList.add('show'));
-        setTimeout(() => {
-          toast.classList.remove('show');
-          setTimeout(() => toast.remove(), 250);
-        }, 3200);
-      }
-
-      function pad2(n) {
-        return String(n).padStart(2, '0');
-      }
-
-      function escapeHtml(str) {
-        return String(str || '')
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-      }
-
-      function escapeIcsText(str) {
-        return String(str || '')
-          .replace(/\\/g, '\\\\')
-          .replace(/\r?\n/g, '\\n')
-          .replace(/,/g, '\\,')
-          .replace(/;/g, '\\;');
-      }
-
-      function formatUtcTimestamp(date) {
-        return (
-          date.getUTCFullYear() +
-          pad2(date.getUTCMonth() + 1) +
-          pad2(date.getUTCDate()) +
-          'T' +
-          pad2(date.getUTCHours()) +
-          pad2(date.getUTCMinutes()) +
-          pad2(date.getUTCSeconds()) +
-          'Z'
-        );
-      }
-
-      function isOvernight(startTime, endTime) {
-        if (!startTime || !endTime) return false;
-        return endTime <= startTime;
-      }
-
-      function showParseError(msg) {
-        el.parseErrorMsg.textContent = msg;
-        el.parseErrorBox.classList.remove('hidden');
-      }
-
-      function hideParseError() {
-        el.parseErrorBox.classList.add('hidden');
-        el.parseErrorMsg.textContent = '';
-      }
-
-      function updateStepperState() {
-        const hasPdf = Boolean(parsedPdf);
-        const hasName = Boolean((appState.selectedName || '').trim()) && rawUserShifts.length > 0;
-        const hasExportable = previewEvents.some((e) => e.included);
-
-        el.stepper1.className = 'step-pill ' + (hasPdf ? 'done' : 'active');
-        el.stepper2.className = 'step-pill ' + (hasName ? 'done' : (hasPdf ? 'active' : ''));
-        el.stepper3.className = 'step-pill ' + (hasName ? (hasExportable ? 'done' : 'active') : '');
-        el.stepper4.className = 'step-pill ' + (hasExportable ? 'active' : '');
-      }
-
-      // =====================================================================
-      // 6. MULTI-PAGE PDF PARSER (PDF.js COORDINATE EXTRACTION)
-      // =====================================================================
-      async function handlePdfUpload(file) {
-        hideParseError();
-
-        if (!window.pdfjsLib) {
-          showParseError('Mozilla PDF.js could not be loaded. Please check your internet connection.');
-          return;
-        }
-        if (!file || (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf')) {
-          showParseError('Please upload a valid PDF file.');
-          return;
-        }
-
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdfDoc = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-          const pages = [];
-          for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
-            const page = await pdfDoc.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            const rawItems = [];
-
-            for (const item of textContent.items) {
-              const str = (item.str || '').trim();
-              if (!str) continue;
-              const x = item.transform[4];
-              const y = item.transform[5];
-              const width = Math.abs(item.width || 0);
-              rawItems.push({
-                str,
-                x,
-                y,
-                width,
-                xc: x + width / 2,
-              });
-            }
-
-            pages.push({
-              pageNum,
-              items: mergeTouchingTextItems(rawItems),
-            });
-          }
-
-          parsedPdf = {
-            fileName: file.name,
-            numPages: pdfDoc.numPages,
-            pages,
-          };
-
-          el.dropZone.classList.add('hidden');
-          el.loadedPdfBanner.classList.remove('hidden');
-          el.loadedFileName.textContent = file.name;
-
-          extractDepartmentAndSchedule();
-          showToast(`Parsed "${file.name}" (${pdfDoc.numPages} page${pdfDoc.numPages === 1 ? '' : 's'})`, 'success');
-        } catch (err) {
-          console.error('PDF parse error:', err);
-          showParseError(`Unable to parse PDF: ${err.message || 'Unknown error'}`);
-        }
-      }
-
-      /**
-       * Merges text fragments on the same baseline (within 2pt) that are touching
-       * (e.g. "Late " + "4" or "11/" + "20") while keeping adjacent cells separate.
-       */
-      function mergeTouchingTextItems(items) {
-        if (!items.length) return [];
-        const sorted = [...items].sort((a, b) => {
-          if (Math.abs(a.y - b.y) > 2.0) return b.y - a.y;
-          return a.x - b.x;
-        });
-
-        const merged = [];
-        for (const curr of sorted) {
-          const prev = merged[merged.length - 1];
-          if (prev && Math.abs(prev.y - curr.y) <= 2.0) {
-            const gap = curr.x - (prev.x + prev.width);
-            const splitToken =
-              gap <= 2.2 ||
-              (gap <= 4.2 && (prev.str.endsWith('/') || prev.str.endsWith('-') || curr.str.startsWith('/') || curr.str.startsWith('-')));
-
-            if (gap >= -2 && splitToken) {
-              const addSpace =
-                gap > 1.2 &&
-                !prev.str.endsWith('/') &&
-                !curr.str.startsWith('/') &&
-                !prev.str.endsWith('-') &&
-                !curr.str.startsWith('-');
-              prev.str = (prev.str + (addSpace ? ' ' : '') + curr.str).replace(/\s+/g, ' ').trim();
-              const rightEdge = Math.max(prev.x + prev.width, curr.x + curr.width);
-              prev.width = rightEdge - prev.x;
-              prev.xc = prev.x + prev.width / 2;
-              continue;
-            }
-          }
-          merged.push({ ...curr });
-        }
-        return merged;
-      }
-
-      /**
-       * Groups items into horizontal rows using y-coordinate tolerance.
-       */
-      function groupRowsByY(items, tolerance = 2.5) {
-        const sorted = [...items].sort((a, b) => b.y - a.y);
-        const rows = [];
-        for (const item of sorted) {
-          let row = null;
-          for (const candidate of rows) {
-            if (Math.abs(candidate.y - item.y) <= tolerance) {
-              row = candidate;
-              break;
-            }
-          }
-          if (row) {
-            row.items.push(item);
-            row.y = row.items.reduce((acc, it) => acc + it.y, 0) / row.items.length;
-          } else {
-            rows.push({ y: item.y, items: [item] });
-          }
-        }
-        rows.forEach((r) => r.items.sort((a, b) => a.x - b.x));
-        return rows;
-      }
-
-      /**
-       * Detects the date header row (M/D or MM/DD) and optional Mon-Sun row above it.
-       */
-      function detectDateHeader(items) {
-        const rows = groupRowsByY(items, 2.5);
-        const dateRegex = /^(\d{1,2})\s*\/\s*(\d{1,2})$/;
-
-        let bestRow = null;
-        let bestTokens = [];
-
-        for (const row of rows) {
-          const tokens = [];
-          for (const it of row.items) {
-            const match = it.str.replace(/\s+/g, '').match(dateRegex);
-            if (match) {
-              const month = parseInt(match[1], 10);
-              const day = parseInt(match[2], 10);
-              if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                tokens.push({
-                  x: it.x,
-                  xc: it.xc,
-                  width: it.width,
-                  month,
-                  day,
-                  dow: null,
-                });
+    return {
+      layout,
+      names,
+      dateSpanText,
+      getShiftsForName(targetName) {
+        const needle = targetName.trim().toLowerCase();
+        const results = [];
+        for (const pr of pageRows) {
+          if (!pr.cols || !pr.cols.length) continue;
+          const matchingNameRows = pr.leftItems.filter(it => it.str.toLowerCase() === needle);
+          for (const nameCell of matchingNameRows) {
+            const rowItems = pr.items.filter(it => it.x0 >= pr.minDateX - 8 && Math.abs(it.y0 - nameCell.y0) <= 2.5);
+            for (const cell of rowItems) {
+              // Find closest date column
+              let bestCol = null;
+              let bestDx = 999;
+              for (const c of pr.cols) {
+                const dx = Math.abs(c.xc - cell.xc);
+                if (dx < bestDx) { bestDx = dx; bestCol = c; }
               }
-            }
-          }
-          if (tokens.length > bestTokens.length) {
-            bestTokens = tokens;
-            bestRow = row;
-          }
-        }
-
-        if (!bestRow || bestTokens.length < 3) return null;
-
-        bestTokens.sort((a, b) => a.xc - b.xc);
-
-        // Estimate average spacing between columns
-        let sumSpacing = 0;
-        let countSpacing = 0;
-        for (let i = 1; i < bestTokens.length; i++) {
-          const d = bestTokens[i].xc - bestTokens[i - 1].xc;
-          if (d > 5) {
-            sumSpacing += d;
-            countSpacing++;
-          }
-        }
-        const avgSpacing = countSpacing > 0 ? sumSpacing / countSpacing : 24;
-
-        // Look for Mon-Sun row above date row (higher y in PDF coordinates)
-        const dowRegex = /^(mon|tue|wed|thu|fri|sat|sun)\b/i;
-        let bestDowItems = [];
-        for (const row of rows) {
-          if (row === bestRow) continue;
-          const dy = row.y - bestRow.y;
-          if (dy > 1 && dy < 45) {
-            const matched = row.items.filter((it) => dowRegex.test(it.str.trim()));
-            if (matched.length > bestDowItems.length) {
-              bestDowItems = matched;
-            }
-          }
-        }
-
-        if (bestDowItems.length >= 3) {
-          for (const dItem of bestDowItems) {
-            const m = dItem.str.trim().match(dowRegex);
-            if (!m) continue;
-            const dowIdx = DOW_MAP[m[1].toLowerCase()];
-            let nearest = null;
-            let minDist = Infinity;
-            for (const col of bestTokens) {
-              const dist = Math.abs(dItem.xc - col.xc);
-              if (dist < minDist) {
-                minDist = dist;
-                nearest = col;
-              }
-            }
-            if (nearest && minDist <= Math.max(15, avgSpacing * 0.65)) {
-              nearest.dow = dowIdx;
-            }
-          }
-        }
-
-        return {
-          dateRowY: bestRow.y,
-          columns: bestTokens,
-          avgSpacing,
-        };
-      }
-
-      /**
-       * Resolves exact calendar year for each date column (including Dec -> Jan rollover).
-       */
-      function resolveYearForColumns(columns, fileName, page1Items, dateRowY, yearOverride) {
-        const nowYear = new Date().getFullYear();
-
-        function evaluateYear(startYear) {
-          let yr = startYear;
-          let validDates = 0;
-          let matchedDow = 0;
-          let totalDow = 0;
-          const resolved = [];
-
-          for (let i = 0; i < columns.length; i++) {
-            const col = columns[i];
-            if (i > 0 && col.month < columns[i - 1].month) {
-              yr += 1;
-            }
-            const dt = new Date(Date.UTC(yr, col.month - 1, col.day));
-            const valid =
-              dt.getUTCFullYear() === yr &&
-              dt.getUTCMonth() === col.month - 1 &&
-              dt.getUTCDate() === col.day;
-            if (valid) validDates++;
-            const actualDow = dt.getUTCDay();
-            if (col.dow !== null) {
-              totalDow++;
-              if (valid && actualDow === col.dow) matchedDow++;
-            }
-            resolved.push({
-              ...col,
-              year: yr,
-              actualDow,
-              dateStr: `${yr}-${pad2(col.month)}-${pad2(col.day)}`,
-            });
-          }
-
-          return {
-            startYear,
-            resolved,
-            allValid: validDates === columns.length,
-            matchedDow,
-            totalDow,
-          };
-        }
-
-        if (yearOverride && yearOverride !== 'auto') {
-          const yNum = parseInt(yearOverride, 10);
-          if (!isNaN(yNum)) {
-            const res = evaluateYear(yNum);
-            return {
-              columns: res.resolved,
-              inferredYear: yNum,
-              yearSource: `Manual override (${yNum})`,
-            };
-          }
-        }
-
-        // Gather year hints from filename & top-of-page text
-        const hintText = [
-          fileName || '',
-          ...page1Items.filter((it) => it.y > dateRowY + 4).map((it) => it.str),
-        ].join(' ');
-
-        const candidates = [];
-        const fullMatches = hintText.match(/\b(20\d{2})\b/g) || [];
-        for (const s of fullMatches) {
-          const y = parseInt(s, 10);
-          if (!candidates.includes(y)) candidates.push(y);
-        }
-        const shortRegex = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[\s\-_']+?(\d{2})\b/gi;
-        let m;
-        while ((m = shortRegex.exec(hintText)) !== null) {
-          const y = 2000 + parseInt(m[1], 10);
-          if (!candidates.includes(y)) candidates.push(y);
-          if (!candidates.includes(y - 1)) candidates.push(y - 1);
-        }
-
-        [nowYear - 1, nowYear, nowYear + 1, nowYear + 2].forEach((y) => {
-          if (!candidates.includes(y)) candidates.push(y);
-        });
-
-        let best = null;
-        for (const y of candidates) {
-          const res = evaluateYear(y);
-          if (!best) {
-            best = res;
-          } else {
-            const bestScore = (best.allValid ? 1000 : 0) + best.matchedDow;
-            const resScore = (res.allValid ? 1000 : 0) + res.matchedDow;
-            if (resScore > bestScore) best = res;
-          }
-          if (res.allValid && res.totalDow > 0 && res.matchedDow === res.totalDow) {
-            best = res;
-            break;
-          }
-        }
-
-        return {
-          columns: best.resolved,
-          inferredYear: best.startYear,
-          yearSource:
-            best.totalDow > 0 && best.matchedDow === best.totalDow
-              ? `Auto-detected ${best.startYear} (${best.matchedDow}/${best.totalDow} weekdays matched)`
-              : `Auto-detected ${best.startYear}`,
-        };
-      }
-
-      /**
-       * Filters out non-faculty header strings from the leftmost column.
-       */
-      function isLikelyFacultyName(str) {
-        const cleaned = str.trim();
-        if (cleaned.length < 2) return false;
-        if (/^\d+([\/\-.,]\d+)*$/.test(cleaned)) return false; // pure numbers/dates
-        if (/\.xlsx?\b|\.pdf\b/i.test(cleaned)) return false;
-        if (/^(faculty|full[\s\-]*time|part[\s\-]*time|availability|schedule\s+by\s+name|name|date|page\s*\d*|total|shift|notes?)$/i.test(cleaned)) {
-          return false;
-        }
-        if (/^(mon|tue|wed|thu|fri|sat|sun)$/i.test(cleaned)) return false;
-        return /[a-zA-Z]/.test(cleaned);
-      }
-
-      function isNameMatch(cellText, targetLower) {
-        const lower = cellText.trim().toLowerCase();
-        return (
-          lower === targetLower ||
-          lower.startsWith(targetLower + ',') ||
-          lower.startsWith(targetLower + ' ')
-        );
-      }
-
-      /**
-       * Runs full extraction across all pages: discovers faculty names and
-       * extracts all shifts for the currently selected name.
-       */
-      function extractDepartmentAndSchedule() {
-        if (!parsedPdf) return;
-        hideParseError();
-
-        const page1Header = detectDateHeader(parsedPdf.pages[0].items);
-        if (!page1Header) {
-          showParseError('Could not detect the MM/DD date header row on Page 1. Please make sure this is a "Schedule By Name" PDF.');
-          discoveredNames = [];
-          rawUserShifts = [];
-          renderAllDynamicSections();
-          return;
-        }
-
-        const page1Resolved = resolveYearForColumns(
-          page1Header.columns,
-          parsedPdf.fileName,
-          parsedPdf.pages[0].items,
-          page1Header.dateRowY,
-          appState.yearOverride
-        );
-
-        const firstCol = page1Resolved.columns[0];
-        const lastCol = page1Resolved.columns[page1Resolved.columns.length - 1];
-        dateRangeInfo = {
-          firstCol,
-          lastCol,
-          inferredYear: page1Resolved.inferredYear,
-          yearSource: page1Resolved.yearSource,
-        };
-
-        const nameSet = new Set();
-        const extracted = [];
-        const targetLower = (appState.selectedName || '').trim().toLowerCase();
-
-        for (const pageData of parsedPdf.pages) {
-          // Reuse Page 1 date columns when Page 2+ omits the header row
-          const pageHeader = detectDateHeader(pageData.items);
-          let resolvedCols;
-          let avgSpacing;
-          let dateRowY = null;
-
-          if (pageHeader) {
-            const res = resolveYearForColumns(
-              pageHeader.columns,
-              parsedPdf.fileName,
-              pageData.items,
-              pageHeader.dateRowY,
-              appState.yearOverride
-            );
-            resolvedCols = res.columns;
-            avgSpacing = pageHeader.avgSpacing;
-            dateRowY = pageHeader.dateRowY;
-          } else {
-            resolvedCols = page1Resolved.columns;
-            avgSpacing = page1Header.avgSpacing;
-          }
-
-          const firstDateX = resolvedCols[0].x;
-          const nameBoundaryX = firstDateX - 8;
-          const maxColDist = Math.max(15, avgSpacing * 0.65);
-
-          // Discover names & find all y-baselines matching selectedName
-          const matchedYs = [];
-          for (const item of pageData.items) {
-            if (item.x < nameBoundaryX) {
-              if (dateRowY !== null && Math.abs(item.y - dateRowY) <= 3.0) continue;
-              const txt = item.str.trim();
-              if (isLikelyFacultyName(txt)) {
-                nameSet.add(txt);
-              }
-              if (targetLower && isNameMatch(txt, targetLower)) {
-                if (!matchedYs.some((yVal) => Math.abs(yVal - item.y) <= 2.5)) {
-                  matchedYs.push(item.y);
-                }
-              }
-            }
-          }
-
-          matchedYs.sort((a, b) => b - a);
-
-          // Extract every shift item on each matching row baseline
-          for (const rowY of matchedYs) {
-            if (dateRowY !== null && Math.abs(rowY - dateRowY) <= 2.5) continue;
-
-            const rowItems = pageData.items
-              .filter((it) => Math.abs(it.y - rowY) <= 2.5 && it.xc >= nameBoundaryX)
-              .sort((a, b) => a.x - b.x);
-
-            for (const it of rowItems) {
-              let nearestCol = null;
-              let minDist = Infinity;
-              for (const col of resolvedCols) {
-                const dist = Math.abs(it.xc - col.xc);
-                if (dist < minDist) {
-                  minDist = dist;
-                  nearestCol = col;
-                }
-              }
-              if (nearestCol && minDist <= maxColDist) {
-                extracted.push({
-                  dateStr: nearestCol.dateStr,
-                  year: nearestCol.year,
-                  month: nearestCol.month,
-                  day: nearestCol.day,
-                  dow: nearestCol.actualDow,
-                  rawCode: it.str.trim(),
+              if (bestCol && bestDx <= 16) {
+                results.push({
+                  dateObj: bestCol.dateObj,
+                  iso: bestCol.iso,
+                  displayDate: `${bestCol.month}/${bestCol.day}/${bestCol.year}`,
+                  dow: bestCol.dow,
+                  shift: cell.str,
+                  printedTime: ''
                 });
               }
             }
           }
         }
-
-        discoveredNames = Array.from(nameSet).sort((a, b) => a.localeCompare(b));
-        extracted.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
-        rawUserShifts = extracted;
-
-        // Update PDF metadata banner & year helper
-        const startText = `${MONTH_NAMES[firstCol.month - 1]} ${firstCol.day}, ${firstCol.year}`;
-        const endText = `${MONTH_NAMES[lastCol.month - 1]} ${lastCol.day}, ${lastCol.year}`;
-        el.loadedFileMeta.textContent = `${parsedPdf.numPages} page${parsedPdf.numPages === 1 ? '' : 's'} · ${startText} – ${endText} · ${discoveredNames.length} names found`;
-        el.yearHelperText.textContent = dateRangeInfo.yearSource;
-        el.nameHelperText.textContent =
-          discoveredNames.length > 0
-            ? `${discoveredNames.length} faculty names discovered. Click the input to browse or filter.`
-            : 'Type your name as it appears on the schedule.';
-
-        renderAllDynamicSections();
+        results.sort((a, b) => a.dateObj - b.dateObj);
+        return results;
       }
+    };
+  } else {
+    // BY-SHIFT LAYOUT: Shift column is on the left, Shift Times next, assigned people in the date grid
+    const namesSet = new Set();
+    const shiftLabelSet = new Set();
+    const parsedPages = pages.map((items, pIdx) => {
+      const cols = pageDateCols[pIdx];
+      if (!cols.length) return null;
+      const dateTokens = items.filter(it => /^\d{1,2}\s*\/\s*\d{1,2}$/.test(it.str));
+      const headerY = dateTokens.length ? Math.max(...dateTokens.map(it => it.y0)) : 750;
+      const firstDateX0 = Math.min(...cols.map(c => c.xc - 8));
+      const minDateX = Math.min(firstDateX0 - 4, 134);
 
-      // =====================================================================
-      // 7. RULE RESOLUTION ENGINE (CUSTOM > SUGGESTED > FALLBACK)
-      // =====================================================================
-      function resolveRuleForShiftCode(code) {
-        const lower = code.trim().toLowerCase();
+      const shiftLabels = items
+        .filter(it => it.x0 < 95 && it.y0 < headerY - 3)
+        .sort((a, b) => b.y0 - a.y0);
+      shiftLabels.forEach(s => shiftLabelSet.add(s.str));
 
-        // 1. Custom exact rule
-        const customExact = appState.customRules.find(
-          (r) => r.matchType === 'exact' && (r.pattern || '').trim().toLowerCase() === lower
-        );
-        if (customExact) {
-          return {
-            source: 'custom',
-            matchedPattern: customExact.pattern,
-            mode: customExact.mode,
-            startTime: customExact.startTime || '08:00',
-            endTime: customExact.endTime || '17:00',
-            customTitle: customExact.customTitle || '',
-            busyStatus: customExact.busyStatus || 'BUSY',
-          };
-        }
+      const timeLabels = items.filter(it => it.x0 >= 92 && it.x0 < minDateX && it.y0 < headerY - 3);
+      const gridCells = items.filter(it => it.x0 >= minDateX && it.y0 < headerY - 3);
 
-        // 2. Custom prefix rule (longest prefix wins)
-        const customPrefixes = appState.customRules
-          .filter((r) => r.matchType === 'prefix' && (r.pattern || '').trim() && lower.startsWith(r.pattern.trim().toLowerCase()))
-          .sort((a, b) => b.pattern.trim().length - a.pattern.trim().length);
-        if (customPrefixes.length > 0) {
-          const r = customPrefixes[0];
-          return {
-            source: 'custom-prefix',
-            matchedPattern: r.pattern + '*',
-            mode: r.mode,
-            startTime: r.startTime || '08:00',
-            endTime: r.endTime || '17:00',
-            customTitle: r.customTitle || '',
-            busyStatus: r.busyStatus || 'BUSY',
-          };
-        }
-
-        // 3. Built-in suggested exact rule
-        const suggExact = SUGGESTED_RULES.find(
-          (r) => r.matchType === 'exact' && r.pattern.toLowerCase() === lower
-        );
-        if (suggExact) {
-          return {
-            source: 'suggested',
-            matchedPattern: suggExact.pattern,
-            mode: suggExact.mode,
-            startTime: suggExact.startTime,
-            endTime: suggExact.endTime,
-            customTitle: '',
-            busyStatus: suggExact.busyStatus,
-          };
-        }
-
-        // 4. Built-in suggested prefix rule (longest prefix wins)
-        const suggPrefixes = SUGGESTED_RULES
-          .filter((r) => r.matchType === 'prefix' && lower.startsWith(r.pattern.toLowerCase()))
-          .sort((a, b) => b.pattern.length - a.pattern.length);
-        if (suggPrefixes.length > 0) {
-          const r = suggPrefixes[0];
-          return {
-            source: 'suggested',
-            matchedPattern: r.pattern + '*',
-            mode: r.mode,
-            startTime: r.startTime,
-            endTime: r.endTime,
-            customTitle: '',
-            busyStatus: r.busyStatus,
-          };
-        }
-
-        // 5. Fallback for unrecognized shift codes
-        return {
-          source: 'unrecognized',
-          matchedPattern: null,
-          mode: 'allday',
-          startTime: '08:00',
-          endTime: '17:00',
-          customTitle: '',
-          busyStatus: 'BUSY',
-        };
-      }
-
-      /**
-       * Creates or updates a Custom Exact Rule for a specific shift code.
-       */
-      function upsertCustomExactRule(code, patch) {
-        const lower = code.trim().toLowerCase();
-        const existingIdx = appState.customRules.findIndex(
-          (r) => r.matchType === 'exact' && (r.pattern || '').trim().toLowerCase() === lower
-        );
-
-        if (existingIdx >= 0) {
-          appState.customRules[existingIdx] = {
-            ...appState.customRules[existingIdx],
-            ...patch,
-          };
-        } else {
-          const current = resolveRuleForShiftCode(code);
-          appState.customRules.push({
-            id: 'cr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            pattern: code.trim(),
-            matchType: 'exact',
-            mode: current.mode,
-            startTime: current.startTime,
-            endTime: current.endTime,
-            customTitle: current.customTitle || '',
-            busyStatus: current.busyStatus || 'BUSY',
-            ...patch,
-          });
-        }
-
-        persistState();
-        renderCustomRulesManager();
-        renderAllDynamicSections();
-      }
-
-      function removeCustomExactRule(code) {
-        const lower = code.trim().toLowerCase();
-        appState.customRules = appState.customRules.filter(
-          (r) => !(r.matchType === 'exact' && (r.pattern || '').trim().toLowerCase() === lower)
-        );
-        persistState();
-        renderCustomRulesManager();
-        renderAllDynamicSections();
-      }
-
-      // =====================================================================
-      // 8. RENDERING: STEP 2 COMBOBOX, STEP 3 SHIFT CONFIG, STEP 4 PREVIEW
-      // =====================================================================
-      function renderNameDropdown(filterText) {
-        const query = (filterText || '').trim().toLowerCase();
-        const matches = discoveredNames.filter((n) => n.toLowerCase().includes(query));
-
-        el.nameDropdown.innerHTML = '';
-        if (discoveredNames.length === 0) {
-          const div = document.createElement('div');
-          div.className = 'combobox-empty';
-          div.textContent = 'Upload a schedule PDF to load faculty names.';
-          el.nameDropdown.appendChild(div);
-          return;
-        }
-
-        if (matches.length === 0) {
-          const div = document.createElement('div');
-          div.className = 'combobox-empty';
-          div.textContent = `No names matching "${filterText}".`;
-          el.nameDropdown.appendChild(div);
-          return;
-        }
-
-        matches.forEach((name) => {
-          const item = document.createElement('div');
-          item.className = 'combobox-item';
-          item.setAttribute('role', 'option');
-          item.textContent = name;
-          item.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // prevent input blur before click
-            selectFacultyName(name);
-            closeNameDropdown();
-          });
-          el.nameDropdown.appendChild(item);
-        });
-      }
-
-      function openNameDropdown() {
-        renderNameDropdown(el.facultyNameInput.value);
-        el.nameDropdown.classList.remove('hidden');
-        el.facultyNameInput.setAttribute('aria-expanded', 'true');
-      }
-
-      function closeNameDropdown() {
-        el.nameDropdown.classList.add('hidden');
-        el.facultyNameInput.setAttribute('aria-expanded', 'false');
-      }
-
-      function selectFacultyName(name) {
-        appState.selectedName = name;
-        el.facultyNameInput.value = name;
-        persistState();
-        if (parsedPdf) {
-          extractDepartmentAndSchedule();
+      for (const cell of gridCells) {
+        if (!shiftLabelSet.has(cell.str) && isLikelyPersonName(cell.str)) {
+          namesSet.add(cell.str);
         }
       }
+      return { cols, shiftLabels, timeLabels, gridCells };
+    }).filter(Boolean);
 
-      function renderAllDynamicSections() {
-        renderStep3DetectedShifts();
-        rebuildPreviewEvents();
-        renderStep4Preview();
-        updateStepperState();
-      }
+    // Filter out any shift label that accidentally entered namesSet
+    for (const sl of shiftLabelSet) namesSet.delete(sl);
 
-      /**
-       * Step 3: Renders a configuration card for every unique shift code on the user's rows.
-       */
-      function renderStep3DetectedShifts() {
-        if (!parsedPdf || !(appState.selectedName || '').trim()) {
-          el.step3Empty.textContent = 'Upload a schedule PDF and select your name above to see and configure your shifts for the month.';
-          el.step3Empty.classList.remove('hidden');
-          el.detectedShiftsList.classList.add('hidden');
-          return;
-        }
+    const names = Array.from(namesSet).sort((a, b) => a.localeCompare(b));
+    if (!names.length) {
+      throw new Error('Detected "By Shift" layout, but could not find any assigned people in the schedule grid.');
+    }
 
-        if (rawUserShifts.length === 0) {
-          el.step3Empty.textContent = `No shifts were found for "${appState.selectedName}" in this PDF. Try selecting a name from the dropdown in Step 2.`;
-          el.step3Empty.classList.remove('hidden');
-          el.detectedShiftsList.classList.add('hidden');
-          return;
-        }
-
-        el.step3Empty.classList.add('hidden');
-        el.detectedShiftsList.classList.remove('hidden');
-
-        // Count unique shift codes in order of appearance
-        const codeCounts = new Map();
-        for (const sh of rawUserShifts) {
-          codeCounts.set(sh.rawCode, (codeCounts.get(sh.rawCode) || 0) + 1);
-        }
-
-        el.detectedShiftsList.innerHTML = '';
-
-        codeCounts.forEach((count, code) => {
-          const rule = resolveRuleForShiftCode(code);
-          const overnight = rule.mode === 'timed' && isOvernight(rule.startTime, rule.endTime);
-
-          const card = document.createElement('div');
-          card.className = 'shift-row-card' + (rule.source === 'unrecognized' ? ' is-unrecognized' : '');
-
-          let sourceBadgeHtml = '';
-          if (rule.source === 'custom') {
-            sourceBadgeHtml = `
-              <span class="badge badge-custom">Custom (Saved)</span>
-              <button type="button" class="reset-link" data-action="reset-code" data-code="${escapeHtml(code)}">Reset</button>
-            `;
-          } else if (rule.source === 'custom-prefix') {
-            sourceBadgeHtml = `<span class="badge badge-custom">Custom Rule (${escapeHtml(rule.matchedPattern)})</span>`;
-          } else if (rule.source === 'suggested') {
-            sourceBadgeHtml = `<span class="badge badge-suggested">Suggested (${escapeHtml(rule.matchedPattern)})</span>`;
-          } else {
-            sourceBadgeHtml = `<span class="badge badge-warn">Unrecognized &mdash; Choose Hours</span>`;
-          }
-
-          const presetsHtml = SHIFT_PRESETS.map((p) => {
-            const isActive =
-              rule.mode === p.mode &&
-              (p.mode !== 'timed' || (rule.startTime === p.startTime && rule.endTime === p.endTime));
-            return `<button
-              type="button"
-              class="preset-btn ${isActive ? 'active' : ''}"
-              data-action="apply-preset"
-              data-code="${escapeHtml(code)}"
-              data-mode="${p.mode}"
-              data-start="${p.startTime}"
-              data-end="${p.endTime}"
-            >${p.label}</button>`;
-          }).join('');
-
-          const timeInputsHtml =
-            rule.mode === 'timed'
-              ? `
-                <div>
-                  <label class="field-label">Start &ndash; End Time ${overnight ? '<span class="badge badge-overnight">Overnight (+1 day)</span>' : ''}</label>
-                  <div class="time-pair">
-                    <input type="time" class="input input-sm" data-code-field="startTime" data-code="${escapeHtml(code)}" value="${rule.startTime}" />
-                    <span style="color:var(--text-muted); font-size:0.8rem;">to</span>
-                    <input type="time" class="input input-sm" data-code-field="endTime" data-code="${escapeHtml(code)}" value="${rule.endTime}" />
-                  </div>
-                </div>
-              `
-              : `
-                <div>
-                  <label class="field-label">Schedule Timing</label>
-                  <div style="font-size:0.82rem; color:var(--text-muted); padding:6px 0;">
-                    ${rule.mode === 'allday' ? 'All-Day calendar event (no specific hours)' : 'Skipped &mdash; will not be added to Outlook'}
-                  </div>
-                </div>
-              `;
-
-          card.innerHTML = `
-            <div class="shift-row-top">
-              <div class="shift-code-info">
-                <span class="shift-code-pill">${escapeHtml(code)}</span>
-                <span class="count-pill">&times;${count} in schedule</span>
-                ${sourceBadgeHtml}
-              </div>
-              <div class="preset-group" aria-label="Quick presets for ${escapeHtml(code)}">
-                ${presetsHtml}
-              </div>
-            </div>
-
-            <div class="shift-controls-grid">
-              <div>
-                <label class="field-label">Mode</label>
-                <select class="select select-sm" data-code-field="mode" data-code="${escapeHtml(code)}">
-                  <option value="timed" ${rule.mode === 'timed' ? 'selected' : ''}>Timed</option>
-                  <option value="allday" ${rule.mode === 'allday' ? 'selected' : ''}>All-Day</option>
-                  <option value="skip" ${rule.mode === 'skip' ? 'selected' : ''}>Skip</option>
-                </select>
-              </div>
-
-              ${timeInputsHtml}
-
-              <div>
-                <label class="field-label">Event Title (Optional)</label>
-                <input
-                  type="text"
-                  class="input input-sm"
-                  data-code-field="customTitle"
-                  data-code="${escapeHtml(code)}"
-                  value="${escapeHtml(rule.customTitle)}"
-                  placeholder="${escapeHtml(code)}"
-                  ${rule.mode === 'skip' ? 'disabled' : ''}
-                />
-              </div>
-
-              <div>
-                <label class="field-label">Show As</label>
-                <select class="select select-sm" data-code-field="busyStatus" data-code="${escapeHtml(code)}" ${rule.mode === 'skip' ? 'disabled' : ''}>
-                  <option value="BUSY" ${rule.busyStatus !== 'FREE' ? 'selected' : ''}>Busy</option>
-                  <option value="FREE" ${rule.busyStatus === 'FREE' ? 'selected' : ''}>Free</option>
-                </select>
-              </div>
-            </div>
-          `;
-
-          el.detectedShiftsList.appendChild(card);
-        });
-      }
-
-      /**
-       * Renders the collapsible "Manage All Saved Shift Rules" table.
-       */
-      function renderCustomRulesManager() {
-        el.savedRulesCount.textContent = String(appState.customRules.length);
-        el.customRulesTableBody.innerHTML = '';
-
-        if (appState.customRules.length === 0) {
-          el.noCustomRulesHint.classList.remove('hidden');
-          return;
-        }
-        el.noCustomRulesHint.classList.add('hidden');
-
-        appState.customRules.forEach((rule, idx) => {
-          const tr = document.createElement('tr');
-          const isTimed = rule.mode === 'timed';
-          tr.innerHTML = `
-            <td>
-              <input type="text" class="input input-sm" style="min-width:110px;" data-rule-idx="${idx}" data-rule-field="pattern" value="${escapeHtml(rule.pattern)}" placeholder="e.g. Adm-" />
-            </td>
-            <td>
-              <select class="select select-sm" data-rule-idx="${idx}" data-rule-field="matchType">
-                <option value="exact" ${rule.matchType === 'exact' ? 'selected' : ''}>Exact</option>
-                <option value="prefix" ${rule.matchType === 'prefix' ? 'selected' : ''}>Prefix (Starts with)</option>
-              </select>
-            </td>
-            <td>
-              <select class="select select-sm" data-rule-idx="${idx}" data-rule-field="mode">
-                <option value="timed" ${rule.mode === 'timed' ? 'selected' : ''}>Timed</option>
-                <option value="allday" ${rule.mode === 'allday' ? 'selected' : ''}>All-Day</option>
-                <option value="skip" ${rule.mode === 'skip' ? 'selected' : ''}>Skip</option>
-              </select>
-            </td>
-            <td>
-              <div style="display:flex; align-items:center; gap:5px;">
-                <input type="time" class="input input-sm" style="width:108px;" data-rule-idx="${idx}" data-rule-field="startTime" value="${rule.startTime || '08:00'}" ${isTimed ? '' : 'disabled'} />
-                <span>–</span>
-                <input type="time" class="input input-sm" style="width:108px;" data-rule-idx="${idx}" data-rule-field="endTime" value="${rule.endTime || '17:00'}" ${isTimed ? '' : 'disabled'} />
-              </div>
-            </td>
-            <td>
-              <input type="text" class="input input-sm" style="min-width:110px;" data-rule-idx="${idx}" data-rule-field="customTitle" value="${escapeHtml(rule.customTitle || '')}" placeholder="Same as shift code" />
-            </td>
-            <td>
-              <select class="select select-sm" data-rule-idx="${idx}" data-rule-field="busyStatus">
-                <option value="BUSY" ${rule.busyStatus !== 'FREE' ? 'selected' : ''}>Busy</option>
-                <option value="FREE" ${rule.busyStatus === 'FREE' ? 'selected' : ''}>Free</option>
-              </select>
-            </td>
-            <td style="text-align:right;">
-              <button type="button" class="btn btn-danger-soft btn-sm" data-action="delete-custom-rule" data-rule-idx="${idx}" title="Remove rule">&times;</button>
-            </td>
-          `;
-          el.customRulesTableBody.appendChild(tr);
-        });
-      }
-
-      /**
-       * Rebuilds previewEvents from rawUserShifts + resolved rules.
-       */
-      function rebuildPreviewEvents() {
-        previewEvents = rawUserShifts.map((sh, i) => {
-          const rule = resolveRuleForShiftCode(sh.rawCode);
-          return {
-            id: `ev_${i}`,
-            dateStr: sh.dateStr,
-            year: sh.year,
-            month: sh.month,
-            day: sh.day,
-            dow: sh.dow,
-            rawCode: sh.rawCode,
-            title: (rule.customTitle || '').trim() || sh.rawCode,
-            mode: rule.mode, // 'timed' | 'allday' | 'skip'
-            startTime: rule.startTime || '08:00',
-            endTime: rule.endTime || '17:00',
-            busyStatus: rule.busyStatus || 'BUSY',
-            included: rule.mode !== 'skip',
-          };
-        });
-      }
-
-      /**
-       * Step 4: Renders the live preview table and summary stats.
-       */
-      function renderStep4Preview() {
-        const visibleEvents = previewEvents.filter((e) => e.mode !== 'skip');
-
-        if (visibleEvents.length === 0) {
-          el.step4Empty.classList.remove('hidden');
-          el.previewTableContainer.classList.add('hidden');
-          el.step4Empty.textContent =
-            rawUserShifts.length > 0
-              ? 'All detected shifts are currently set to Skip. Change a shift mode in Step 3 to include it.'
-              : 'No shifts ready to preview yet. Upload a PDF and select your name to generate your schedule preview.';
-        } else {
-          el.step4Empty.classList.add('hidden');
-          el.previewTableContainer.classList.remove('hidden');
-        }
-
-        el.previewTableBody.innerHTML = '';
-
-        previewEvents.forEach((ev, idx) => {
-          if (ev.mode === 'skip') return;
-
-          const tr = document.createElement('tr');
-          if (!ev.included) tr.className = 'row-excluded';
-
-          const dateLabel = `${MONTH_NAMES[ev.month - 1]} ${ev.day}, ${ev.year}`;
-          const overnight = ev.mode === 'timed' && isOvernight(ev.startTime, ev.endTime);
-
-          const timeCellHtml =
-            ev.mode === 'timed'
-              ? `
-                <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
-                  <input type="time" class="input input-sm" style="width:108px;" data-ev-idx="${idx}" data-ev-field="startTime" value="${ev.startTime}" />
-                  <span style="color:var(--text-muted);">–</span>
-                  <input type="time" class="input input-sm" style="width:108px;" data-ev-idx="${idx}" data-ev-field="endTime" value="${ev.endTime}" />
-                  ${overnight ? '<span class="badge badge-overnight">+1d</span>' : ''}
-                </div>
-              `
-              : `<span class="badge badge-warn" style="background:#f1f5f9; color:#334155; border-color:#cbd5e1;">All-Day Event</span>`;
-
-          tr.innerHTML = `
-            <td>
-              <input type="checkbox" class="checkbox" data-ev-idx="${idx}" data-ev-field="included" ${ev.included ? 'checked' : ''} />
-            </td>
-            <td style="white-space:nowrap; font-weight:600;">${dateLabel}</td>
-            <td style="white-space:nowrap; color:var(--text-secondary);">${DOW_NAMES[ev.dow]}</td>
-            <td style="white-space:nowrap;">
-              <span style="font-family:ui-monospace,monospace; font-size:0.8rem; background:var(--bg-muted); padding:2px 6px; border-radius:5px;">${escapeHtml(ev.rawCode)}</span>
-            </td>
-            <td>
-              <input type="text" class="input input-sm" style="min-width:130px; max-width:220px;" data-ev-idx="${idx}" data-ev-field="title" value="${escapeHtml(ev.title)}" />
-            </td>
-            <td>${timeCellHtml}</td>
-            <td>
-              <select class="select select-sm" style="width:92px;" data-ev-idx="${idx}" data-ev-field="busyStatus">
-                <option value="BUSY" ${ev.busyStatus !== 'FREE' ? 'selected' : ''}>Busy</option>
-                <option value="FREE" ${ev.busyStatus === 'FREE' ? 'selected' : ''}>Free</option>
-              </select>
-            </td>
-          `;
-          el.previewTableBody.appendChild(tr);
-        });
-
-        updateStep4Stats();
-      }
-
-      function updateStep4Stats() {
-        const active = previewEvents.filter((e) => e.mode !== 'skip' && e.included);
-        const visible = previewEvents.filter((e) => e.mode !== 'skip');
-        const timedCount = active.filter((e) => e.mode === 'timed').length;
-        const allDayCount = active.filter((e) => e.mode === 'allday').length;
-        const skippedCount = previewEvents.length - active.length;
-
-        el.statExportCount.textContent = String(active.length);
-        el.statTimedCount.textContent = String(timedCount);
-        el.statAllDayCount.textContent = String(allDayCount);
-        el.statSkippedCount.textContent = String(skippedCount);
-
-        el.selectAllEventsCheckbox.checked = visible.length > 0 && active.length === visible.length;
-        el.selectAllEventsCheckbox.indeterminate = active.length > 0 && active.length < visible.length;
-
-        const canExport = active.length > 0;
-        el.downloadIcsBtn.disabled = !canExport;
-        el.copyIcsBtn.disabled = !canExport;
-        el.downloadBtnText.textContent = canExport
-          ? `Download Outlook Calendar (.ics) · ${active.length}`
-          : 'Download Outlook Calendar (.ics)';
-
-        updateStepperState();
-      }
-
-      // =====================================================================
-      // 9. RFC 5545 OUTLOOK .ICS GENERATOR (ZERO VALARM BLOCKS)
-      // =====================================================================
-      function generateIcsText() {
-        const exportEvents = previewEvents.filter((e) => e.mode !== 'skip' && e.included);
-        if (exportEvents.length === 0) return '';
-
-        const tz = appState.timeZone || localBrowserTZ || 'America/Los_Angeles';
-        const dtstamp = formatUtcTimestamp(new Date());
-        const nameClean = (appState.selectedName || 'Department').trim();
-        const nameSlug = nameClean.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user';
-        const sourceFile = parsedPdf ? parsedPdf.fileName : 'Schedule PDF';
-
-        const calName = buildCalendarDisplayName(nameClean);
-
-        const lines = [
-          'BEGIN:VCALENDAR',
-          'VERSION:2.0',
-          'PRODID:-//Department Schedule Converter//Outlook ICS//EN',
-          'CALSCALE:GREGORIAN',
-          'METHOD:PUBLISH',
-          `X-WR-CALNAME:${escapeIcsText(calName)}`,
-          `X-WR-TIMEZONE:${tz}`,
-        ];
-
-        if (VTIMEZONE_DEFS[tz]) {
-          lines.push(VTIMEZONE_DEFS[tz]);
-        }
-
-        exportEvents.forEach((ev, idx) => {
-          const yyyymmdd = `${ev.year}${pad2(ev.month)}${pad2(ev.day)}`;
-          const titleClean = (ev.title || ev.rawCode || 'Shift').trim();
-          const titleSlug = titleClean.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'shift';
-          const uid = `${yyyymmdd}-${titleSlug}-${idx + 1}-${nameSlug}@deptschedule.local`;
-          const desc = `Shift (${ev.rawCode}) for ${nameClean} from ${sourceFile}`;
-
-          lines.push('BEGIN:VEVENT');
-          lines.push(`UID:${uid}`);
-          lines.push(`DTSTAMP:${dtstamp}`);
-
-          if (ev.mode === 'timed') {
-            const startHHMM = (ev.startTime || '08:00').replace(':', '');
-            const endHHMM = (ev.endTime || '17:00').replace(':', '');
-            let endDateStr = yyyymmdd;
-
-            // Overnight (+1 day) handling
-            if (isOvernight(ev.startTime, ev.endTime)) {
-              const nextDt = new Date(Date.UTC(ev.year, ev.month - 1, ev.day + 1));
-              endDateStr = `${nextDt.getUTCFullYear()}${pad2(nextDt.getUTCMonth() + 1)}${pad2(nextDt.getUTCDate())}`;
+    return {
+      layout,
+      names,
+      dateSpanText,
+      getShiftsForName(targetName) {
+        const needle = targetName.trim().toLowerCase();
+        const results = [];
+        for (const pp of parsedPages) {
+          for (const cell of pp.gridCells) {
+            if (cell.str.trim().toLowerCase() !== needle) continue;
+            // Match date column
+            let bestCol = null;
+            let bestDx = 999;
+            for (const c of pp.cols) {
+              const dx = Math.abs(c.xc - cell.xc);
+              if (dx < bestDx) { bestDx = dx; bestCol = c; }
             }
+            if (!bestCol || bestDx > 18) continue;
 
-            lines.push(`DTSTART;TZID=${tz}:${yyyymmdd}T${startHHMM}00`);
-            lines.push(`DTEND;TZID=${tz}:${endDateStr}T${endHHMM}00`);
-          } else {
-            const nextDt = new Date(Date.UTC(ev.year, ev.month - 1, ev.day + 1));
-            const nextDateStr = `${nextDt.getUTCFullYear()}${pad2(nextDt.getUTCMonth() + 1)}${pad2(nextDt.getUTCDate())}`;
-            lines.push(`DTSTART;VALUE=DATE:${yyyymmdd}`);
-            lines.push(`DTEND;VALUE=DATE:${nextDateStr}`);
-            lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE');
+            // Match shift label on same y (or closest at/above y)
+            let bestShift = null;
+            let bestDy = 999;
+            for (const s of pp.shiftLabels) {
+              const dy = Math.abs(s.y0 - cell.y0);
+              if (dy < bestDy) { bestDy = dy; bestShift = s; }
+            }
+            if (!bestShift || bestDy > 14) continue;
+
+            const nearTime = pp.timeLabels.find(t => Math.abs(t.y0 - bestShift.y0) <= 4);
+            results.push({
+              dateObj: bestCol.dateObj,
+              iso: bestCol.iso,
+              displayDate: `${bestCol.month}/${bestCol.day}/${bestCol.year}`,
+              dow: bestCol.dow,
+              shift: bestShift.str,
+              printedTime: nearTime ? nearTime.str : ''
+            });
           }
-
-          lines.push(`X-MICROSOFT-CDO-BUSYSTATUS:${ev.busyStatus === 'FREE' ? 'FREE' : 'BUSY'}`);
-          lines.push(`SUMMARY:${escapeIcsText(titleClean)}`);
-          lines.push(`DESCRIPTION:${escapeIcsText(desc)}`);
-          // Strictly NO VALARM blocks so imported events have no reminders
-          lines.push('END:VEVENT');
-        });
-
-        lines.push('END:VCALENDAR');
-        return lines.join('\r\n') + '\r\n';
+        }
+        results.sort((a, b) => a.dateObj - b.dateObj);
+        return results;
       }
+    };
+  }
+}
 
-      function buildCalendarDisplayName(nameClean) {
-        if (!dateRangeInfo) return `${nameClean} Work Schedule`;
-        const { firstCol, lastCol } = dateRangeInfo;
-        return `${nameClean} Schedule (${MONTH_NAMES[firstCol.month - 1]} ${firstCol.day} - ${MONTH_NAMES[lastCol.month - 1]} ${lastCol.day}, ${lastCol.year})`;
-      }
+// --- UI WIRING ---
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const layoutOverride = document.getElementById('layoutOverride');
+const nameSelect = document.getElementById('nameSelect');
+const nameInput = document.getElementById('nameInput');
+const tzSelect = document.getElementById('tzSelect');
 
-      function buildIcsFilename() {
-        const safeName = (appState.selectedName || 'Schedule').trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
-        if (!dateRangeInfo) return `${safeName}_Schedule.ics`;
-        const { firstCol, lastCol } = dateRangeInfo;
-        return `${safeName}_Schedule_${firstCol.dateStr}_to_${lastCol.dateStr}.ics`;
-      }
+try {
+  const savedTz = localStorage.getItem(STORAGE_TZ_KEY);
+  if (savedTz) tzSelect.value = savedTz;
+} catch (e) {}
 
-      function downloadIcs() {
-        const ics = generateIcsText();
-        if (!ics) return;
-        const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = buildIcsFilename();
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        showToast(`Downloaded ${a.download}`, 'success');
-      }
+tzSelect.addEventListener('change', () => {
+  try { localStorage.setItem(STORAGE_TZ_KEY, tzSelect.value); } catch (e) {}
+});
 
-      function copyIcs() {
-        const ics = generateIcsText();
-        if (!ics) return;
-        try {
-          el.clipboardHelper.value = ics;
-          el.clipboardHelper.select();
-          el.clipboardHelper.setSelectionRange(0, ics.length);
-          const ok = document.execCommand('copy');
-          showToast(ok ? 'Copied .ics calendar text to clipboard' : 'Copy failed — please use Download', ok ? 'success' : 'error');
-        } catch (_) {
-          showToast('Copy failed — please use Download', 'error');
-        }
-      }
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+});
 
-      // =====================================================================
-      // 10. SHAREABLE RULES JSON EXPORT / IMPORT
-      // =====================================================================
-      function exportRulesJson() {
-        const payload = {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          customRules: appState.customRules,
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'department-shift-rules.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        showToast('Exported department-shift-rules.json', 'success');
-      }
+layoutOverride.addEventListener('change', () => {
+  if (!pdfPagesItems.length) return;
+  reparseWithLayout();
+});
 
-      async function importRulesJson(file) {
-        if (!file) return;
-        try {
-          const text = await file.text();
-          const parsed = JSON.parse(text);
-          const incoming = Array.isArray(parsed) ? parsed : parsed.customRules;
-          if (!Array.isArray(incoming)) {
-            showToast('Invalid rules JSON format.', 'error');
-            return;
-          }
-          const sanitized = incoming
-            .filter((r) => r && typeof r.pattern === 'string')
-            .map((r) => ({
-              id: 'cr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-              pattern: r.pattern.trim(),
-              matchType: r.matchType === 'prefix' ? 'prefix' : 'exact',
-              mode: ['timed', 'allday', 'skip'].includes(r.mode) ? r.mode : 'timed',
-              startTime: r.startTime || '08:00',
-              endTime: r.endTime || '17:00',
-              customTitle: r.customTitle || '',
-              busyStatus: r.busyStatus === 'FREE' ? 'FREE' : 'BUSY',
-            }));
+async function handleFile(file) {
+  const errEl = document.getElementById('uploadError');
+  errEl.classList.remove('show');
+  if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+    errEl.textContent = 'Please upload a valid PDF schedule file (.pdf).';
+    errEl.classList.add('show');
+    return;
+  }
+  currentFileName = file.name;
+  try {
+    const buf = await file.arrayBuffer();
+    pdfPagesItems = await extractPdfTextItems(buf);
+    const totalText = pdfPagesItems.reduce((acc, p) => acc + p.length, 0);
+    if (totalText < 20) {
+      throw new Error('This PDF contains no extractable text (it appears to be a scanned image). Please use the original spreadsheet-exported PDF.');
+    }
+    detectedLayout = detectPdfLayout(pdfPagesItems);
+    layoutOverride.value = 'auto';
+    reparseWithLayout();
+  } catch (err) {
+    errEl.textContent = err.message || 'Unable to parse this PDF.';
+    errEl.classList.add('show');
+    document.getElementById('step2').classList.add('hidden');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+  }
+}
 
-          appState.customRules = sanitized;
-          persistState();
-          renderCustomRulesManager();
-          renderAllDynamicSections();
-          showToast(`Imported ${sanitized.length} shift rule${sanitized.length === 1 ? '' : 's'}`, 'success');
-        } catch (err) {
-          showToast('Could not read JSON file: ' + (err.message || 'Invalid JSON'), 'error');
-        }
-      }
+function reparseWithLayout() {
+  const errEl = document.getElementById('uploadError');
+  errEl.classList.remove('show');
+  const activeLayout = layoutOverride.value === 'auto' ? detectedLayout : layoutOverride.value;
+  try {
+    parsedSchedule = buildParser(pdfPagesItems, activeLayout);
+    document.getElementById('fileMeta').classList.remove('hidden');
+    document.getElementById('fileNameDisplay').textContent = currentFileName;
+    document.getElementById('dateRangeDisplay').textContent = parsedSchedule.dateSpanText;
 
-      // =====================================================================
-      // 11. EVENT LISTENERS
-      // =====================================================================
+    const badge = document.getElementById('formatBadge');
+    badge.textContent = activeLayout === 'by-shift'
+      ? 'Format: Shifts on Left (By Shift)'
+      : 'Format: Names on Left (By Name)';
+    badge.classList.remove('hidden');
 
-      // Step 1: PDF Upload & Drag-and-Drop
-      el.browsePdfBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        el.pdfFileInput.click();
+    // Populate names dropdown
+    nameSelect.innerHTML = parsedSchedule.names.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    let chosen = '';
+    try { chosen = localStorage.getItem(STORAGE_NAME_KEY) || ''; } catch (e) {}
+    const match = parsedSchedule.names.find(n => n.toLowerCase() === chosen.toLowerCase())
+               || parsedSchedule.names.find(n => n.toLowerCase() === 'malkin')
+               || parsedSchedule.names[0];
+    if (match) {
+      nameSelect.value = match;
+      nameInput.value = match;
+    }
+
+    document.getElementById('step2').classList.remove('hidden');
+    refreshForSelectedName();
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not parse schedule structure.';
+    errEl.classList.add('show');
+  }
+}
+
+nameSelect.addEventListener('change', () => {
+  nameInput.value = nameSelect.value;
+  refreshForSelectedName();
+});
+
+nameInput.addEventListener('input', () => {
+  const typed = nameInput.value.trim().toLowerCase();
+  const exact = parsedSchedule && parsedSchedule.names.find(n => n.toLowerCase() === typed);
+  if (exact) nameSelect.value = exact;
+  refreshForSelectedName();
+});
+
+function refreshForSelectedName() {
+  if (!parsedSchedule) return;
+  const target = nameInput.value.trim();
+  const nameAlert = document.getElementById('nameAlert');
+  nameAlert.classList.remove('show');
+
+  if (!target) {
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+    return;
+  }
+
+  try { localStorage.setItem(STORAGE_NAME_KEY, target); } catch (e) {}
+  const rawShifts = parsedSchedule.getShiftsForName(target);
+  if (!rawShifts.length) {
+    nameAlert.textContent = `No shifts found for "${target}" in this PDF. Check the spelling or choose a name from the dropdown.`;
+    nameAlert.classList.add('show');
+    document.getElementById('step3').classList.add('hidden');
+    document.getElementById('step4').classList.add('hidden');
+    return;
+  }
+
+  activeShifts = rawShifts.map((s, idx) => {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    return {
+      ...s,
+      id: idx,
+      included: rule.mode !== 'skip'
+    };
+  });
+
+  document.getElementById('step3').classList.remove('hidden');
+  document.getElementById('step4').classList.remove('hidden');
+  renderShiftRuleCards();
+  renderPreviewTable();
+}
+
+function renderShiftRuleCards() {
+  const container = document.getElementById('shiftRulesContainer');
+  const groups = new Map();
+  for (const s of activeShifts) {
+    if (!groups.has(s.shift)) groups.set(s.shift, { count: 0, printedTime: s.printedTime });
+    groups.get(s.shift).count++;
+  }
+
+  container.innerHTML = '';
+  for (const [shiftCode, info] of groups.entries()) {
+    const rule = getRuleForShift(shiftCode, info.printedTime);
+    const card = document.createElement('div');
+    card.className = 'shift-rule-card';
+
+    const presetsHtml = TIME_PRESETS.map(p =>
+      `<button type="button" class="sm preset-btn" data-mode="${p.mode}" data-start="${p.start || ''}" data-end="${p.end || ''}">${p.label}</button>`
+    ).join('');
+
+    card.innerHTML = `
+      <div class="shift-rule-top">
+        <div>
+          <span class="shift-code-tag">${escapeHtml(shiftCode)}</span>
+          <span class="count-pill">${info.count} shift${info.count > 1 ? 's' : ''}</span>
+          ${info.printedTime ? `<span class="printed-time-pill">PDF time: ${escapeHtml(info.printedTime)}</span>` : ''}
+        </div>
+        <div class="preset-btns">${presetsHtml}</div>
+      </div>
+      <div class="rule-controls">
+        <select class="rule-mode">
+          <option value="timed" ${rule.mode === 'timed' ? 'selected' : ''}>Timed Shift</option>
+          <option value="allday" ${rule.mode === 'allday' ? 'selected' : ''}>All-Day Event</option>
+          <option value="skip" ${rule.mode === 'skip' ? 'selected' : ''}>Skip (Do Not Import)</option>
+        </select>
+        <span class="time-inputs ${rule.mode === 'timed' ? '' : 'hidden'}">
+          <input type="time" class="rule-start" value="${rule.start || '08:00'}" />
+          <span>to</span>
+          <input type="time" class="rule-end" value="${rule.end || '17:00'}" />
+          <label style="display:inline-flex; align-items:center; gap:4px; margin-left:6px; font-weight:500;">
+            <input type="checkbox" class="rule-overnight" ${rule.overnight ? 'checked' : ''} /> Overnight (+1d)
+          </label>
+        </span>
+      </div>
+    `;
+
+    const modeSel = card.querySelector('.rule-mode');
+    const timeSpan = card.querySelector('.time-inputs');
+    const startInp = card.querySelector('.rule-start');
+    const endInp = card.querySelector('.rule-end');
+    const ovnInp = card.querySelector('.rule-overnight');
+
+    const commit = () => {
+      const mode = modeSel.value;
+      timeSpan.classList.toggle('hidden', mode !== 'timed');
+      const start = startInp.value || '08:00';
+      const end = endInp.value || '17:00';
+      const overnight = ovnInp.checked;
+      savedRules[shiftCode] = { mode, start, end, overnight };
+      saveRules();
+      activeShifts.forEach(s => {
+        if (s.shift === shiftCode) s.included = (mode !== 'skip');
       });
+      renderPreviewTable();
+    };
 
-      el.replacePdfBtn.addEventListener('click', () => el.pdfFileInput.click());
+    modeSel.addEventListener('change', commit);
+    startInp.addEventListener('change', commit);
+    endInp.addEventListener('change', () => {
+      if (startInp.value && endInp.value && endInp.value <= startInp.value) ovnInp.checked = true;
+      commit();
+    });
+    ovnInp.addEventListener('change', commit);
 
-      el.dropZone.addEventListener('click', () => el.pdfFileInput.click());
-      el.dropZone.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          el.pdfFileInput.click();
-        }
+    card.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modeSel.value = btn.dataset.mode;
+        if (btn.dataset.start) startInp.value = btn.dataset.start;
+        if (btn.dataset.end) endInp.value = btn.dataset.end;
+        ovnInp.checked = (btn.dataset.start && btn.dataset.end && btn.dataset.end <= btn.dataset.start);
+        commit();
       });
+    });
 
-      el.pdfFileInput.addEventListener('change', (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (file) handlePdfUpload(file);
-        e.target.value = '';
-      });
+    container.appendChild(card);
+  }
+}
 
-      ['dragenter', 'dragover'].forEach((evt) => {
-        el.dropZone.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          el.dropZone.classList.add('drag-over');
-        });
-      });
+function format12h(hhmm) {
+  const [hStr, mStr] = hhmm.split(':');
+  let h = parseInt(hStr, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${mStr} ${ampm}`;
+}
 
-      ['dragleave', 'drop'].forEach((evt) => {
-        el.dropZone.addEventListener(evt, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          el.dropZone.classList.remove('drag-over');
-        });
-      });
+function renderPreviewTable() {
+  const tbody = document.getElementById('previewBody');
+  tbody.innerHTML = '';
+  let includedCount = 0;
 
-      el.dropZone.addEventListener('drop', (e) => {
-        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (file) handlePdfUpload(file);
-      });
+  for (const s of activeShifts) {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    if (s.included) includedCount++;
 
-      // Step 2: Searchable Name Input, Year Override & Time Zone
-      el.facultyNameInput.addEventListener('focus', () => openNameDropdown());
+    let hoursText = 'All-day';
+    if (rule.mode === 'skip') {
+      hoursText = 'Skipped';
+    } else if (rule.mode === 'timed') {
+      hoursText = `${format12h(rule.start)} – ${format12h(rule.end)}${rule.overnight ? ' (+1d)' : ''}`;
+    }
 
-      el.facultyNameInput.addEventListener('input', (e) => {
-        appState.selectedName = e.target.value;
-        persistState();
-        openNameDropdown();
-        if (parsedPdf) extractDepartmentAndSchedule();
-      });
+    const tr = document.createElement('tr');
+    if (!s.included) tr.classList.add('skipped');
+    tr.innerHTML = `
+      <td><input type="checkbox" ${s.included ? 'checked' : ''} /></td>
+      <td>${escapeHtml(s.displayDate)}</td>
+      <td>${escapeHtml(s.dow)}</td>
+      <td><strong>${escapeHtml(s.shift)}</strong></td>
+      <td>${escapeHtml(hoursText)}</td>
+      <td><span class="badge success">Free</span></td>
+    `;
+    tr.querySelector('input[type="checkbox"]').addEventListener('change', e => {
+      s.included = e.target.checked;
+      tr.classList.toggle('skipped', !s.included);
+      updateEventCount();
+    });
+    tbody.appendChild(tr);
+  }
+  updateEventCount();
+}
 
-      document.addEventListener('click', (e) => {
-        if (!el.nameCombobox.contains(e.target)) {
-          closeNameDropdown();
-        }
-      });
+function updateEventCount() {
+  const n = activeShifts.filter(s => s.included).length;
+  document.getElementById('eventCountBadge').textContent = `${n} event${n === 1 ? '' : 's'} ready`;
+}
 
-      el.yearOverrideSelect.addEventListener('change', (e) => {
-        appState.yearOverride = e.target.value;
-        persistState();
-        if (parsedPdf) extractDepartmentAndSchedule();
-      });
+// --- MANAGE ALL RULES ---
+function renderAllRulesTable() {
+  const wrap = document.getElementById('allRulesTableWrap');
+  const entries = Object.entries(savedRules).sort((a, b) => a[0].localeCompare(b[0]));
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>Shift</th><th>Type</th><th>Hours</th><th></th></tr></thead>
+      <tbody>
+        ${entries.map(([code, r]) => `
+          <tr>
+            <td><strong>${escapeHtml(code)}</strong></td>
+            <td>${escapeHtml(r.mode)}</td>
+            <td>${r.mode === 'timed' ? `${r.start} – ${r.end}${r.overnight ? ' (+1d)' : ''}` : '—'}</td>
+            <td style="text-align:right;"><button type="button" class="sm del-rule" data-code="${escapeHtml(code)}">Remove</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+  wrap.querySelectorAll('.del-rule').forEach(btn => {
+    btn.addEventListener('click', () => {
+      delete savedRules[btn.dataset.code];
+      saveRules();
+      if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+    });
+  });
+}
 
-      el.timeZoneSelect.addEventListener('change', (e) => {
-        appState.timeZone = e.target.value;
-        persistState();
-      });
+document.getElementById('addRuleBtn').addEventListener('click', () => {
+  const code = document.getElementById('newRuleCode').value.trim();
+  if (!code) return;
+  const mode = document.getElementById('newRuleMode').value;
+  const start = document.getElementById('newRuleStart').value || '08:00';
+  const end = document.getElementById('newRuleEnd').value || '17:00';
+  savedRules[code] = { mode, start, end, overnight: mode === 'timed' && end <= start };
+  saveRules();
+  document.getElementById('newRuleCode').value = '';
+  if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+});
 
-      // Step 3: Detected Shift Cards (Event Delegation)
-      el.detectedShiftsList.addEventListener('click', (e) => {
-        const presetBtn = e.target.closest('[data-action="apply-preset"]');
-        if (presetBtn) {
-          const code = presetBtn.getAttribute('data-code');
-          const mode = presetBtn.getAttribute('data-mode');
-          const startTime = presetBtn.getAttribute('data-start');
-          const endTime = presetBtn.getAttribute('data-end');
-          upsertCustomExactRule(code, { mode, startTime, endTime });
-          return;
-        }
+document.getElementById('exportRulesBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(savedRules, null, 2)], { type: 'application/json' });
+  triggerDownload(blob, 'schedule-shift-rules.json');
+});
 
-        const resetBtn = e.target.closest('[data-action="reset-code"]');
-        if (resetBtn) {
-          const code = resetBtn.getAttribute('data-code');
-          removeCustomExactRule(code);
-          showToast(`Reset "${code}" to suggested default`, 'info');
-        }
-      });
+document.getElementById('importRulesBtn').addEventListener('click', () => {
+  document.getElementById('importRulesInput').click();
+});
 
-      el.detectedShiftsList.addEventListener('change', (e) => {
-        const target = e.target;
-        const field = target.getAttribute('data-code-field');
-        const code = target.getAttribute('data-code');
-        if (!field || !code) return;
-        upsertCustomExactRule(code, { [field]: target.value });
-      });
+document.getElementById('importRulesInput').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const obj = JSON.parse(await f.text());
+    savedRules = { ...savedRules, ...obj };
+    saveRules();
+    if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+  } catch (err) {
+    alert('Invalid JSON rules file.');
+  }
+});
 
-      // Step 3: Collapsible Custom Rules Manager
-      el.toggleRulesManagerBtn.addEventListener('click', () => {
-        const isHidden = el.rulesManagerPanel.classList.toggle('hidden');
-        el.rulesManagerChevron.classList.toggle('open', !isHidden);
-        el.toggleRulesManagerBtn.setAttribute('aria-expanded', String(!isHidden));
-      });
+document.getElementById('resetRulesBtn').addEventListener('click', () => {
+  savedRules = JSON.parse(JSON.stringify(DEFAULT_EXACT_RULES));
+  saveRules();
+  if (activeShifts.length) { renderShiftRuleCards(); renderPreviewTable(); }
+});
 
-      el.addCustomRuleBtn.addEventListener('click', () => {
-        appState.customRules.push({
-          id: 'cr_' + Date.now(),
-          pattern: '',
-          matchType: 'exact',
-          mode: 'timed',
-          startTime: '07:00',
-          endTime: '17:00',
-          customTitle: '',
-          busyStatus: 'BUSY',
-        });
-        persistState();
-        renderCustomRulesManager();
-        const inputs = el.customRulesTableBody.querySelectorAll('input[data-rule-field="pattern"]');
-        if (inputs.length) inputs[inputs.length - 1].focus();
-      });
+// --- ICS GENERATION (ALWAYS FREE, ZERO REMINDERS) ---
+function pad2(n) { return String(n).padStart(2, '0'); }
 
-      el.customRulesTableBody.addEventListener('change', (e) => {
-        const target = e.target;
-        const idx = parseInt(target.getAttribute('data-rule-idx'), 10);
-        const field = target.getAttribute('data-rule-field');
-        if (isNaN(idx) || !field || !appState.customRules[idx]) return;
+function ymdCompact(d) {
+  return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+}
 
-        appState.customRules[idx][field] = target.value;
-        persistState();
-        if (field === 'mode') renderCustomRulesManager();
-        renderAllDynamicSections();
-      });
+function buildVTimezone(tz) {
+  if (tz === 'America/Los_Angeles') {
+    return [
+      'BEGIN:VTIMEZONE',
+      'TZID:America/Los_Angeles',
+      'BEGIN:STANDARD',
+      'DTSTART:19701101T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+      'TZOFFSETFROM:-0700',
+      'TZOFFSETTO:-0800',
+      'TZNAME:PST',
+      'END:STANDARD',
+      'BEGIN:DAYLIGHT',
+      'DTSTART:19700308T020000',
+      'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+      'TZOFFSETFROM:-0800',
+      'TZOFFSETTO:-0700',
+      'TZNAME:PDT',
+      'END:DAYLIGHT',
+      'END:VTIMEZONE'
+    ];
+  }
+  return [];
+}
 
-      el.customRulesTableBody.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-action="delete-custom-rule"]');
-        if (!btn) return;
-        const idx = parseInt(btn.getAttribute('data-rule-idx'), 10);
-        if (isNaN(idx)) return;
-        appState.customRules.splice(idx, 1);
-        persistState();
-        renderCustomRulesManager();
-        renderAllDynamicSections();
-      });
+document.getElementById('downloadIcsBtn').addEventListener('click', () => {
+  const selected = activeShifts.filter(s => s.included);
+  if (!selected.length) {
+    alert('No shifts selected to export.');
+    return;
+  }
+  const person = nameInput.value.trim() || 'Schedule';
+  const tz = tzSelect.value || 'America/Los_Angeles';
+  const now = new Date();
+  const dtstamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth()+1)}${pad2(now.getUTCDate())}T${pad2(now.getUTCHours())}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}Z`;
 
-      el.exportRulesJsonBtn.addEventListener('click', exportRulesJson);
-      el.importRulesJsonBtn.addEventListener('click', () => el.importRulesFileInput.click());
-      el.importRulesFileInput.addEventListener('change', (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (file) importRulesJson(file);
-        e.target.value = '';
-      });
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Department Schedule Converter//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${person} Work Schedule`,
+    `X-WR-TIMEZONE:${tz}`,
+    ...buildVTimezone(tz)
+  ];
 
-      // Two-click inline confirmation for Reset to Defaults (no confirm())
-      el.resetAllRulesBtn.addEventListener('click', () => {
-        if (!resetConfirmPending) {
-          resetConfirmPending = true;
-          el.resetAllRulesBtn.textContent = 'Click again to confirm reset';
-          setTimeout(() => {
-            resetConfirmPending = false;
-            el.resetAllRulesBtn.textContent = 'Reset to Defaults';
-          }, 3500);
-          return;
-        }
-        resetConfirmPending = false;
-        el.resetAllRulesBtn.textContent = 'Reset to Defaults';
-        appState.customRules = [];
-        persistState();
-        renderCustomRulesManager();
-        renderAllDynamicSections();
-        showToast('All custom rules cleared — restored suggested defaults', 'info');
-      });
+  selected.forEach((s, i) => {
+    const rule = getRuleForShift(s.shift, s.printedTime);
+    const dStart = s.dateObj;
+    const uid = `${ymdCompact(dStart)}-${i}-${person.toLowerCase().replace(/[^a-z0-9]/g, '')}@deptschedule.local`;
 
-      // Step 4: Preview Table Inline Edits & Export
-      el.selectAllEventsCheckbox.addEventListener('change', (e) => {
-        const checked = e.target.checked;
-        previewEvents.forEach((ev) => {
-          if (ev.mode !== 'skip') ev.included = checked;
-        });
-        renderStep4Preview();
-      });
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${uid}`);
+    lines.push(`DTSTAMP:${dtstamp}`);
 
-      el.previewTableBody.addEventListener('input', (e) => {
-        const target = e.target;
-        const idx = parseInt(target.getAttribute('data-ev-idx'), 10);
-        const field = target.getAttribute('data-ev-field');
-        if (isNaN(idx) || !field || !previewEvents[idx]) return;
-        if (field === 'title') {
-          previewEvents[idx].title = target.value;
-        }
-      });
+    if (rule.mode === 'allday') {
+      const nextDay = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1);
+      lines.push(`DTSTART;VALUE=DATE:${ymdCompact(dStart)}`);
+      lines.push(`DTEND;VALUE=DATE:${ymdCompact(nextDay)}`);
+      lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE');
+      lines.push('TRANSP:TRANSPARENT');
+      lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
+    } else {
+      const [sh, sm] = (rule.start || '08:00').split(':');
+      const [eh, em] = (rule.end || '17:00').split(':');
+      const endDate = rule.overnight
+        ? new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1)
+        : dStart;
+      lines.push(`DTSTART;TZID=${tz}:${ymdCompact(dStart)}T${sh}${sm}00`);
+      lines.push(`DTEND;TZID=${tz}:${ymdCompact(endDate)}T${eh}${em}00`);
+      lines.push('TRANSP:TRANSPARENT');
+      lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
+    }
 
-      el.previewTableBody.addEventListener('change', (e) => {
-        const target = e.target;
-        const idx = parseInt(target.getAttribute('data-ev-idx'), 10);
-        const field = target.getAttribute('data-ev-field');
-        if (isNaN(idx) || !field || !previewEvents[idx]) return;
+    lines.push(`SUMMARY:${escapeIcsText(s.shift)}`);
+    lines.push(`DESCRIPTION:Work schedule shift (${escapeIcsText(s.shift)})`);
+    lines.push('END:VEVENT');
+  });
 
-        if (field === 'included') {
-          previewEvents[idx].included = target.checked;
-          renderStep4Preview();
-        } else if (field === 'startTime' || field === 'endTime' || field === 'busyStatus') {
-          previewEvents[idx][field] = target.value;
-          if (field === 'startTime' || field === 'endTime') renderStep4Preview();
-        }
-      });
+  lines.push('END:VCALENDAR');
+  const icsStr = lines.join('\r\n') + '\r\n';
+  const blob = new Blob([icsStr], { type: 'text/calendar;charset=utf-8' });
+  const safePerson = person.replace(/[^A-Za-z0-9_-]+/g, '_');
+  triggerDownload(blob, `${safePerson}_Work_Schedule.ics`);
+});
 
-      el.downloadIcsBtn.addEventListener('click', downloadIcs);
-      el.copyIcsBtn.addEventListener('click', copyIcs);
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
 
-      // Outlook Tip Collapsible
-      el.toggleOutlookTipBtn.addEventListener('click', () => {
-        const isHidden = el.outlookTipPanel.classList.toggle('hidden');
-        el.outlookTipChevron.classList.toggle('open', !isHidden);
-        el.toggleOutlookTipBtn.setAttribute('aria-expanded', String(!isHidden));
-      });
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 
-      // Boot
-      initControls();
-    })();
-  </script>
+function escapeIcsText(str) {
+  return String(str).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+renderAllRulesTable();
+</script>
 </body>
 </html>
