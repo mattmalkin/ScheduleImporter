@@ -514,12 +514,27 @@ async function extractPdfTextItems(arrayBuffer) {
     const tc = await page.getTextContent();
     const items = [];
     for (const item of tc.items) {
-      const str = (item.str || '').trim();
-      if (!str) continue;
+      const raw = item.str || '';
+      if (!raw.trim()) continue;
       const x0 = item.transform[4];
       const y0 = item.transform[5];
-      const w = item.width || (str.length * 4);
-      items.push({ x0, y0, x1: x0 + w, xc: x0 + w / 2, str });
+      const totalW = item.width || (raw.length * 4);
+
+      // Split items merged across spreadsheet cells by 3+ consecutive spaces
+      if (/\s{3,}/.test(raw)) {
+        const charW = totalW / Math.max(raw.length, 1);
+        const re = /\S+(?: \S+)*/g;
+        let m;
+        while ((m = re.exec(raw)) !== null) {
+          const seg = m[0].trim();
+          const segX0 = x0 + m.index * charW;
+          const segW = seg.length * charW;
+          items.push({ x0: segX0, y0, x1: segX0 + segW, xc: segX0 + segW / 2, str: seg });
+        }
+      } else {
+        const str = raw.trim();
+        items.push({ x0, y0, x1: x0 + totalW, xc: x0 + totalW / 2, str });
+      }
     }
     pages.push(items);
   }
