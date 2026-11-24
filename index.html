@@ -279,6 +279,40 @@
     color: #334155;
   }
   tr.skipped { opacity: 0.45; }
+  tr.customized { background: #fffbeb; }
+  .inline-input {
+    padding: 4px 7px !important;
+    font-size: 0.84rem !important;
+    border-radius: 5px !important;
+  }
+  .inline-title {
+    width: 120px;
+    font-weight: 600;
+  }
+  .inline-hours {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+  .inline-time {
+    width: 108px;
+  }
+  .custom-pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    padding: 1px 6px;
+    border-radius: 999px;
+  }
+  .reset-row-btn {
+    padding: 2px 7px;
+    font-size: 0.74rem;
+    color: var(--muted);
+  }
+
   details summary {
     cursor: pointer;
     font-weight: 600;
@@ -429,19 +463,20 @@
   <!-- STEP 4: PREVIEW & EXPORT -->
   <section id="step4" class="card hidden">
     <div class="step-header">
-      <h2 class="step-title"><span class="step-num">4</span> Preview &amp; Download Outlook Calendar (.ics)</h2>
+      <h2 class="step-title"><span class="step-num">4</span> Preview, Edit Individual Shifts &amp; Download (.ics)</h2>
       <span id="eventCountBadge" class="badge"></span>
     </div>
+    <p class="muted" style="margin:0 0 10px;">Edit any individual day's title or hours below (for example, late-start Tuesdays) without changing the default shift rule above.</p>
     <div style="overflow-x:auto;">
       <table>
         <thead>
           <tr>
-            <th style="width:42px;">Inc.</th>
-            <th>Date</th>
+            <th style="width:40px;">Inc.</th>
+            <th style="white-space:nowrap;">Date</th>
             <th>Day</th>
             <th>Shift Title</th>
-            <th>Hours</th>
-            <th>Availability</th>
+            <th>Hours (Editable Per Day)</th>
+            <th style="width:96px;">Status</th>
           </tr>
         </thead>
         <tbody id="previewBody"></tbody>
@@ -457,39 +492,111 @@
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-const STORAGE_RULES_KEY = 'dept_sched_rules_v3';
+const STORAGE_RULES_KEY = 'dept_sched_rules_v4';
 const STORAGE_NAME_KEY = 'dept_sched_last_name_v3';
 const STORAGE_TZ_KEY = 'dept_sched_tz_v3';
 
+const SHIFT_FAMILIES = [
+  { key: 'PAV',      label: 'PAV (all PAV shifts)',       pattern: /^PAV-/i },
+  { key: 'Adm',      label: 'Adm (all Adm shifts)',       pattern: /^Adm-/i },
+  { key: 'PM',       label: 'PM (PM-1, PM-2, all PM)',    pattern: /^PM-/i },
+  { key: '48X-10',   label: '48X-10 (all 48X-10 shifts)', pattern: /^48X-10(?:-|$)/i },
+  { key: '48X-11',   label: '48X-11 (all 48X-11 shifts)', pattern: /^48X-11(?:-|$)/i },
+  { key: 'CTV',      label: 'CTV (CTV-1 through CTV-6)',  pattern: /^CTV-\d+$/i },
+  { key: 'Ped-2–6',  label: 'Ped-2–6 (Ped-2 to Ped-6)',   pattern: /^Ped-[2-6]$/i },
+  { key: 'WE-D1/D2', label: 'WE-D1/D2 (WE-D1 & WE-D2)',   pattern: /^WE-D[12]$/i }
+];
+
+function getShiftRuleKey(shiftCode) {
+  const clean = (shiftCode || '').trim();
+  for (const fam of SHIFT_FAMILIES) {
+    if (fam.pattern.test(clean)) return fam.key;
+  }
+  return clean;
+}
+
+function getShiftFamilyLabel(ruleKey) {
+  const fam = SHIFT_FAMILIES.find(f => f.key === ruleKey);
+  return fam ? fam.label : ruleKey;
+}
+
+const CANONICAL_LONG_SHIFTS = [
+  'Critical Care-WE',
+  'Critical Care-WED',
+  'Critical Care-WEN',
+  'Critical Care-N',
+  'Critical Care',
+  'Ortho-Joint/Trauma',
+  'ENT-Airway-Burn',
+  'Urology-GYN-OPT',
+  'Robotics-Plastics',
+  'Ped-CVT-1 (7a-5p)',
+  'Ped-CVT-N (5p-7a)',
+  'Ped-PL2-N(5P-7A)',
+  'Ped-WED/Night',
+  'GI-Midtown-1',
+  'GI-Midtown-2',
+  'Late-2 Call Back'
+];
+
+function canonicalizeShiftName(rawText) {
+  const clean = (rawText || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+
+  // Treat any Liver Transplant / Liver Transplant Call variant (including unpredictable truncation) as one shift
+  if (/transplan|ransplant|liver\s*trans/i.test(clean)) {
+    return 'Liver Transplant Call';
+  }
+
+  const lower = clean.toLowerCase();
+  for (const full of CANONICAL_LONG_SHIFTS) {
+    if (full.toLowerCase() === lower) return full;
+  }
+
+  // Restore other truncated long shift names via contiguous substring matching
+  if (clean.length >= 6) {
+    const matches = CANONICAL_LONG_SHIFTS.filter(full => full.toLowerCase().includes(lower));
+    if (matches.length) {
+      matches.sort((a, b) => a.length - b.length);
+      return matches[0];
+    }
+  }
+
+  return clean;
+}
+
 const DEFAULT_EXACT_RULES = {
-  'PREP':    { mode: 'timed', start: '08:00', end: '17:00', overnight: false },
-  'Late 4':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
-  'Late 5':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
-  'Late 10': { mode: 'timed', start: '10:00', end: '20:00', overnight: false },
-  'UT12':    { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
-  'UT2 12':  { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
-  'UT2 10':  { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
-  'PACU':    { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
-  'Chief':   { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
-  'OB-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
-  'WD-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
-  'WE-N':    { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
-  'PM-1':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false },
-  'PM-2':    { mode: 'timed', start: '17:00', end: '21:00', overnight: false }
+  'PREP':     { mode: 'timed', start: '08:00', end: '17:00', overnight: false },
+  'Late 4':   { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 5':   { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'Late 10':  { mode: 'timed', start: '10:00', end: '20:00', overnight: false },
+  'UT12':     { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 12':   { mode: 'timed', start: '07:00', end: '19:00', overnight: false },
+  'UT2 10':   { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'PACU':     { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'Chief':    { mode: 'timed', start: '06:45', end: '17:00', overnight: false },
+  'OB-N':     { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WD-N':     { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'WE-N':     { mode: 'timed', start: '17:00', end: '07:00', overnight: true },
+  'PAV':      { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'Adm':      { mode: 'allday' },
+  'PM':       { mode: 'timed', start: '17:00', end: '21:00', overnight: false },
+  '48X-10':   { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  '48X-11':   { mode: 'timed', start: '07:00', end: '18:00', overnight: false },
+  '48X-Late': { mode: 'timed', start: '11:00', end: '21:00', overnight: false },
+  'CTV':      { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'Ped-2–6':  { mode: 'timed', start: '07:00', end: '17:00', overnight: false },
+  'WE-D1/D2': { mode: 'timed', start: '07:00', end: '18:00', overnight: false },
+  'Liver Transplant Call': { mode: 'allday' }
 };
 
 const DEFAULT_PREFIX_RULES = [
-  { prefix: 'Adm-',     rule: { mode: 'allday' } },
   { prefix: 'Mtg-',     rule: { mode: 'allday' } },
   { prefix: 'Leave-',   rule: { mode: 'skip' } },
   { prefix: 'FMLA-',    rule: { mode: 'skip' } },
   { prefix: 'Off-',     rule: { mode: 'skip' } },
   { prefix: 'Post-C',   rule: { mode: 'skip' } },
-  { prefix: 'PAV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
-  { prefix: '48X-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
-  { prefix: 'SDS',      rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
-  { prefix: 'CTV-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } },
-  { prefix: 'Ped-',     rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } }
+  { prefix: 'SDS',      rule: { mode: 'timed', start: '07:00', end: '17:00', overnight: false } }
 ];
 
 const TIME_PRESETS = [
@@ -531,10 +638,14 @@ function saveRules() {
 
 function getRuleForShift(shiftCode, printedTime) {
   const clean = (shiftCode || '').trim();
+  const ruleKey = getShiftRuleKey(clean);
+  if (savedRules[ruleKey]) return { ...savedRules[ruleKey], source: 'saved' };
   if (savedRules[clean]) return { ...savedRules[clean], source: 'saved' };
+  const lowerKey = ruleKey.toLowerCase();
   const lower = clean.toLowerCase();
   for (const [k, v] of Object.entries(savedRules)) {
-    if (k.toLowerCase() === lower) return { ...v, source: 'saved' };
+    const kl = k.toLowerCase();
+    if (kl === lowerKey || kl === lower) return { ...v, source: 'saved' };
   }
   for (const p of DEFAULT_PREFIX_RULES) {
     if (lower.startsWith(p.prefix.toLowerCase())) {
@@ -609,7 +720,9 @@ async function extractPdfTextItems(arrayBuffer) {
         rawItems.push({ x0, y0, x1: x0 + totalW, xc: x0 + totalW / 2, str });
       }
     }
-    pages.push(mergeTinyFragments(rawItems));
+    const merged = mergeTinyFragments(rawItems);
+    merged._rawItems = rawItems;
+    pages.push(merged);
   }
   return pages;
 }
@@ -777,28 +890,72 @@ function buildParser(pages, layout) {
       getShiftsForName(targetName) {
         const needle = targetName.trim().toLowerCase();
         const results = [];
+        const seenDayShift = new Set();
+
         for (const pr of pageRows) {
+          const sourceItems = pr.items._rawItems || pr.items;
+          const colSpacing = pr.cols.length > 1 ? (pr.cols[1].xc - pr.cols[0].xc) : 19;
           const matchingNameRows = pr.leftItems.filter(it => it.str.toLowerCase() === needle);
+
           for (const nameCell of matchingNameRows) {
-            const rowItems = pr.items.filter(it => it.xc >= pr.nameMaxX && Math.abs(it.y0 - nameCell.y0) <= 2.5);
-            // Group fragments landing in the same date column
+            const rowItems = sourceItems.filter(it => it.xc >= pr.nameMaxX && Math.abs(it.y0 - nameCell.y0) <= 2.5);
             const colBuckets = new Map();
+
             for (const cell of rowItems) {
+              // If a single raw item spans multiple columns, split it proportionally across column boundaries
+              const cellW = cell.x1 - cell.x0;
+              if (cellW > colSpacing * 1.25 && cell.str.length > 4) {
+                const charW = cellW / cell.str.length;
+                for (const c of pr.cols) {
+                  const leftEdge = c.xc - colSpacing / 2;
+                  const rightEdge = c.xc + colSpacing / 2;
+                  const ovLeft = Math.max(cell.x0, leftEdge);
+                  const ovRight = Math.min(cell.x1, rightEdge);
+                  if (ovRight - ovLeft > 2) {
+                    const i0 = Math.max(0, Math.round((ovLeft - cell.x0) / charW));
+                    const i1 = Math.min(cell.str.length, Math.round((ovRight - cell.x0) / charW));
+                    const slice = cell.str.slice(i0, i1).trim();
+                    if (slice) {
+                      if (!colBuckets.has(c.iso)) colBuckets.set(c.iso, { col: c, parts: [] });
+                      colBuckets.get(c.iso).parts.push({ x0: ovLeft, x1: ovRight, str: slice });
+                    }
+                  }
+                }
+                continue;
+              }
+
               let bestCol = null;
               let bestDx = 999;
               for (const c of pr.cols) {
                 const dx = Math.abs(c.xc - cell.xc);
                 if (dx < bestDx) { bestDx = dx; bestCol = c; }
               }
-              if (bestCol && bestDx <= 16) {
+              if (bestCol && bestDx <= Math.max(16, colSpacing * 0.6)) {
                 if (!colBuckets.has(bestCol.iso)) colBuckets.set(bestCol.iso, { col: bestCol, parts: [] });
                 colBuckets.get(bestCol.iso).parts.push(cell);
               }
             }
+
             for (const { col, parts } of colBuckets.values()) {
               parts.sort((a, b) => a.x0 - b.x0);
-              const shiftText = parts.map(p => p.str).join(' ').replace(/\s+/g, ' ').trim();
+              let joined = '';
+              for (let i = 0; i < parts.length; i++) {
+                const p = parts[i];
+                if (i === 0) {
+                  joined = p.str;
+                } else {
+                  const prev = parts[i - 1];
+                  const gap = p.x0 - prev.x1;
+                  const needsSpace = gap > 0.7 && !joined.endsWith('-') && !joined.endsWith('/') && !p.str.startsWith('-') && !p.str.startsWith('/');
+                  joined += (needsSpace ? ' ' : '') + p.str;
+                }
+              }
+              const shiftText = canonicalizeShiftName(joined);
               if (!shiftText) continue;
+              const dedupeKey = `${col.iso}|${shiftText.toLowerCase()}`;
+              if (seenDayShift.has(dedupeKey)) continue;
+              seenDayShift.add(dedupeKey);
+
               results.push({
                 dateObj: col.dateObj,
                 iso: col.iso,
@@ -860,6 +1017,7 @@ function buildParser(pages, layout) {
       getShiftsForName(targetName) {
         const needle = targetName.trim().toLowerCase();
         const results = [];
+        const seenDayShift = new Set();
         for (const pp of parsedPages) {
           for (const cell of pp.gridCells) {
             if (cell.str.trim().toLowerCase() !== needle) continue;
@@ -880,12 +1038,16 @@ function buildParser(pages, layout) {
             if (!bestShift || bestDy > 14) continue;
 
             const nearTime = pp.timeLabels.find(t => Math.abs(t.y0 - bestShift.y0) <= 4);
+            const shiftText = canonicalizeShiftName(bestShift.str);
+            const dedupeKey = `${bestCol.iso}|${shiftText.toLowerCase()}`;
+            if (seenDayShift.has(dedupeKey)) continue;
+            seenDayShift.add(dedupeKey);
             results.push({
               dateObj: bestCol.dateObj,
               iso: bestCol.iso,
               displayDate: `${bestCol.month}/${bestCol.day}/${bestCol.year}`,
               dow: bestCol.dow,
-              shift: bestShift.str,
+              shift: shiftText,
               printedTime: nearTime ? nearTime.str : ''
             });
           }
@@ -1029,7 +1191,8 @@ function refreshForSelectedName() {
     return {
       ...s,
       id: idx,
-      included: rule.mode !== 'skip'
+      included: rule.mode !== 'skip',
+      override: null // { title, mode, start, end, overnight } when edited individually
     };
   });
 
@@ -1043,15 +1206,27 @@ function renderShiftRuleCards() {
   const container = document.getElementById('shiftRulesContainer');
   const groups = new Map();
   for (const s of activeShifts) {
-    if (!groups.has(s.shift)) groups.set(s.shift, { count: 0, printedTime: s.printedTime });
-    groups.get(s.shift).count++;
+    const rKey = getShiftRuleKey(s.shift);
+    if (!groups.has(rKey)) {
+      groups.set(rKey, { count: 0, printedTime: s.printedTime, members: new Set() });
+    }
+    const g = groups.get(rKey);
+    g.count++;
+    g.members.add(s.shift);
+    if (!g.printedTime && s.printedTime) g.printedTime = s.printedTime;
   }
 
   container.innerHTML = '';
-  for (const [shiftCode, info] of groups.entries()) {
-    const rule = getRuleForShift(shiftCode, info.printedTime);
+  for (const [ruleKey, info] of groups.entries()) {
+    const rule = getRuleForShift(ruleKey, info.printedTime);
     const card = document.createElement('div');
     card.className = 'shift-rule-card';
+
+    const membersArr = Array.from(info.members).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const isGrouped = membersArr.length > 1 || (membersArr.length === 1 && membersArr[0] !== ruleKey);
+    const membersNote = isGrouped
+      ? `<div class="muted" style="font-size:0.78rem; margin-top:2px;">Applies to: ${escapeHtml(membersArr.join(', '))}</div>`
+      : '';
 
     const presetsHtml = TIME_PRESETS.map(p =>
       `<button type="button" class="sm preset-btn" data-mode="${p.mode}" data-start="${p.start || ''}" data-end="${p.end || ''}">${p.label}</button>`
@@ -1060,9 +1235,10 @@ function renderShiftRuleCards() {
     card.innerHTML = `
       <div class="shift-rule-top">
         <div>
-          <span class="shift-code-tag">${escapeHtml(shiftCode)}</span>
+          <span class="shift-code-tag">${escapeHtml(getShiftFamilyLabel(ruleKey))}</span>
           <span class="count-pill">${info.count} shift${info.count > 1 ? 's' : ''}</span>
           ${info.printedTime ? `<span class="printed-time-pill">PDF time: ${escapeHtml(info.printedTime)}</span>` : ''}
+          ${membersNote}
         </div>
         <div class="preset-btns">${presetsHtml}</div>
       </div>
@@ -1095,10 +1271,12 @@ function renderShiftRuleCards() {
       const start = startInp.value || '08:00';
       const end = endInp.value || '17:00';
       const overnight = ovnInp.checked;
-      savedRules[shiftCode] = { mode, start, end, overnight };
+      savedRules[ruleKey] = { mode, start, end, overnight };
       saveRules();
       activeShifts.forEach(s => {
-        if (s.shift === shiftCode) s.included = (mode !== 'skip');
+        if (getShiftRuleKey(s.shift) === ruleKey && !s.override) {
+          s.included = (mode !== 'skip');
+        }
       });
       renderPreviewTable();
     };
@@ -1133,35 +1311,116 @@ function format12h(hhmm) {
   return `${h}:${mStr} ${ampm}`;
 }
 
+function getEffectiveShift(s) {
+  const base = getRuleForShift(s.shift, s.printedTime);
+  if (s.override) {
+    return {
+      title: s.override.title !== undefined ? s.override.title : s.shift,
+      mode: s.override.mode || (base.mode === 'skip' ? 'allday' : base.mode),
+      start: s.override.start || base.start || '08:00',
+      end: s.override.end || base.end || '17:00',
+      overnight: Boolean(s.override.overnight),
+      isCustom: true
+    };
+  }
+  return {
+    title: s.shift,
+    mode: base.mode === 'skip' ? 'allday' : base.mode,
+    start: base.start || '08:00',
+    end: base.end || '17:00',
+    overnight: Boolean(base.overnight),
+    isCustom: false
+  };
+}
+
 function renderPreviewTable() {
   const tbody = document.getElementById('previewBody');
   tbody.innerHTML = '';
 
   for (const s of activeShifts) {
-    const rule = getRuleForShift(s.shift, s.printedTime);
-
-    let hoursText = 'All-day';
-    if (rule.mode === 'skip') {
-      hoursText = 'Skipped';
-    } else if (rule.mode === 'timed') {
-      hoursText = `${format12h(rule.start)} – ${format12h(rule.end)}${rule.overnight ? ' (+1d)' : ''}`;
-    }
-
+    const eff = getEffectiveShift(s);
     const tr = document.createElement('tr');
     if (!s.included) tr.classList.add('skipped');
+    if (eff.isCustom) tr.classList.add('customized');
+
     tr.innerHTML = `
-      <td><input type="checkbox" ${s.included ? 'checked' : ''} /></td>
-      <td>${escapeHtml(s.displayDate)}</td>
+      <td><input type="checkbox" class="row-inc" ${s.included ? 'checked' : ''} /></td>
+      <td style="white-space:nowrap;">${escapeHtml(s.displayDate)}</td>
       <td>${escapeHtml(s.dow)}</td>
-      <td><strong>${escapeHtml(s.shift)}</strong></td>
-      <td>${escapeHtml(hoursText)}</td>
-      <td><span class="badge success">Free</span></td>
+      <td>
+        <input type="text" class="inline-input inline-title row-title" value="${escapeHtml(eff.title)}" />
+      </td>
+      <td>
+        <div class="inline-hours">
+          <select class="inline-input row-mode">
+            <option value="timed" ${eff.mode === 'timed' ? 'selected' : ''}>Timed</option>
+            <option value="allday" ${eff.mode === 'allday' ? 'selected' : ''}>All-Day</option>
+          </select>
+          <span class="row-time-wrap ${eff.mode === 'timed' ? '' : 'hidden'}" style="display:inline-flex; align-items:center; gap:4px;">
+            <input type="time" class="inline-input inline-time row-start" value="${escapeHtml(eff.start)}" />
+            <span>–</span>
+            <input type="time" class="inline-input inline-time row-end" value="${escapeHtml(eff.end)}" />
+            <label style="display:inline-flex; align-items:center; gap:3px; font-size:0.76rem; font-weight:500; white-space:nowrap;">
+              <input type="checkbox" class="row-ovn" ${eff.overnight ? 'checked' : ''} /> +1d
+            </label>
+          </span>
+        </div>
+      </td>
+      <td style="white-space:nowrap;">
+        ${eff.isCustom
+          ? `<span class="custom-pill">Custom</span> <button type="button" class="reset-row-btn" title="Reset to shift-type default">↺</button>`
+          : `<span class="badge success">Free</span>`
+        }
+      </td>
     `;
-    tr.querySelector('input[type="checkbox"]').addEventListener('change', e => {
+
+    const incCb = tr.querySelector('.row-inc');
+    const titleInp = tr.querySelector('.row-title');
+    const modeSel = tr.querySelector('.row-mode');
+    const timeWrap = tr.querySelector('.row-time-wrap');
+    const startInp = tr.querySelector('.row-start');
+    const endInp = tr.querySelector('.row-end');
+    const ovnCb = tr.querySelector('.row-ovn');
+    const resetBtn = tr.querySelector('.reset-row-btn');
+
+    const saveRowOverride = () => {
+      const mode = modeSel.value;
+      timeWrap.classList.toggle('hidden', mode !== 'timed');
+      const start = startInp.value || '08:00';
+      const end = endInp.value || '17:00';
+      const overnight = ovnCb.checked;
+      const title = titleInp.value.trim() || s.shift;
+      s.override = { title, mode, start, end, overnight };
+      if (!s.included) {
+        s.included = true;
+        incCb.checked = true;
+      }
+      renderPreviewTable();
+    };
+
+    incCb.addEventListener('change', e => {
       s.included = e.target.checked;
       tr.classList.toggle('skipped', !s.included);
       updateEventCount();
     });
+    titleInp.addEventListener('change', saveRowOverride);
+    modeSel.addEventListener('change', saveRowOverride);
+    startInp.addEventListener('change', saveRowOverride);
+    endInp.addEventListener('change', () => {
+      if (startInp.value && endInp.value && endInp.value <= startInp.value) ovnCb.checked = true;
+      saveRowOverride();
+    });
+    ovnCb.addEventListener('change', saveRowOverride);
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        s.override = null;
+        const baseRule = getRuleForShift(s.shift, s.printedTime);
+        s.included = baseRule.mode !== 'skip';
+        renderPreviewTable();
+      });
+    }
+
     tbody.appendChild(tr);
   }
   updateEventCount();
@@ -1201,8 +1460,9 @@ function renderAllRulesTable() {
 }
 
 document.getElementById('addRuleBtn').addEventListener('click', () => {
-  const code = document.getElementById('newRuleCode').value.trim();
-  if (!code) return;
+  const rawCode = document.getElementById('newRuleCode').value.trim();
+  if (!rawCode) return;
+  const code = getShiftRuleKey(rawCode);
   const mode = document.getElementById('newRuleMode').value;
   const start = document.getElementById('newRuleStart').value || '08:00';
   const end = document.getElementById('newRuleEnd').value || '17:00';
@@ -1295,7 +1555,7 @@ document.getElementById('downloadIcsBtn').addEventListener('click', () => {
   ];
 
   selected.forEach((s, i) => {
-    const rule = getRuleForShift(s.shift, s.printedTime);
+    const eff = getEffectiveShift(s);
     const dStart = s.dateObj;
     const uid = `${ymdCompact(dStart)}-${i}-${person.toLowerCase().replace(/[^a-z0-9]/g, '')}@deptschedule.local`;
 
@@ -1303,7 +1563,7 @@ document.getElementById('downloadIcsBtn').addEventListener('click', () => {
     lines.push(`UID:${uid}`);
     lines.push(`DTSTAMP:${dtstamp}`);
 
-    if (rule.mode === 'allday') {
+    if (eff.mode === 'allday') {
       const nextDay = new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1);
       lines.push(`DTSTART;VALUE=DATE:${ymdCompact(dStart)}`);
       lines.push(`DTEND;VALUE=DATE:${ymdCompact(nextDay)}`);
@@ -1311,9 +1571,9 @@ document.getElementById('downloadIcsBtn').addEventListener('click', () => {
       lines.push('TRANSP:TRANSPARENT');
       lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
     } else {
-      const [sh, sm] = (rule.start || '08:00').split(':');
-      const [eh, em] = (rule.end || '17:00').split(':');
-      const endDate = rule.overnight
+      const [sh, sm] = (eff.start || '08:00').split(':');
+      const [eh, em] = (eff.end || '17:00').split(':');
+      const endDate = eff.overnight
         ? new Date(dStart.getFullYear(), dStart.getMonth(), dStart.getDate() + 1)
         : dStart;
       lines.push(`DTSTART;TZID=${tz}:${ymdCompact(dStart)}T${sh}${sm}00`);
@@ -1322,8 +1582,8 @@ document.getElementById('downloadIcsBtn').addEventListener('click', () => {
       lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE');
     }
 
-    lines.push(`SUMMARY:${escapeIcsText(s.shift)}`);
-    lines.push(`DESCRIPTION:Work schedule shift (${escapeIcsText(s.shift)})`);
+    lines.push(`SUMMARY:${escapeIcsText(eff.title)}`);
+    lines.push(`DESCRIPTION:Work schedule shift (${escapeIcsText(eff.title)})`);
     lines.push('END:VEVENT');
   });
 
